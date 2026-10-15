@@ -379,4 +379,250 @@
     render: function (kr, s) { if (!s) { kr.html('__t', S.text(500, 30, '编辑距离', 'vt')); kr.end(); return; } dpGrid(kr, s); }
   });
 
+  /* ============================================================
+     6. 矩阵连乘（区间 DP）
+     ============================================================ */
+  DSV.register({
+    id: 'dp-matrix-chain', name: '矩阵连乘（区间 DP）', category: '动态规划',
+    desc: 'n 个矩阵连乘的乘法次数与结合顺序有关。m[i][j]=min_k (m[i][k]+m[k+1][j]+d[i-1]·d[k]·d[j])，枚举分割点 k，再由 s 表回溯出最优括号化。时间 O(n³)，空间 O(n²)。',
+    code: [
+      'm[i][i] = 0',
+      'for len = 2 to n:                  // 区间长度',
+      '  for i = 1 to n-len+1:',
+      '    j = i + len - 1',
+      '    m[i][j] = ∞',
+      '    for k = i to j-1:               // 枚举分割点',
+      '      q = m[i][k] + m[k+1][j] + d[i-1]*d[k]*d[j]',
+      '      if q < m[i][j]: m[i][j] = q; s[i][j] = k',
+      'return m[1][n]'
+    ],
+    viewBox: '0 0 1000 620',
+    inputs: [{ key: 'dims', label: '维度序列 d', def: '10,30,5,60', hint: 'n 个矩阵对应 n+1 个维度值' }],
+    samples: [
+      { label: '示例：3 个矩阵', values: { dims: '10,30,5,60' } },
+      { label: '示例：4 个矩阵', values: { dims: '30,35,15,5,10' } }
+    ],
+    random: function () {
+      var n = DSV.ri(3, 4), d = [];
+      for (var i = 0; i <= n; i++) { d.push(DSV.ri(5, 50)); }
+      return { dims: d.join(',') };
+    },
+    run: function (v) {
+      var d = DSV.nums(v.dims, 8);
+      var n = d.length - 1;
+      var steps = [];
+      if (n < 2) {
+        return [{ code: [1], desc: '输入无效：维度序列至少 3 个数（对应 2 个矩阵），例如 10,30,5,60。',
+          snap: { msg: '请输入至少 3 个维度值', warn: true } }];
+      }
+      var m = [], s = [], tab = [];
+      for (var r = 0; r <= n; r++) { m.push([]); s.push([]); tab.push([]); for (var c = 0; c <= n; c++) { m[r].push(0); s[r].push(0); tab[r].push({ v: '', cls: '' }); } }
+      var headR = [], headC = [];
+      for (var a = 1; a <= n; a++) { headR.push('A' + a); headC.push('A' + a); }
+      function snapT(extra) {
+        extra = extra || {};
+        var t = [];
+        for (var i = 1; i <= n; i++) { t.push([]); for (var j = 1; j <= n; j++) { t[i - 1].push({ v: tab[i][j].v, cls: tab[i][j].cls }); } }
+        return { R: n, C: n, headR: headR, headC: headC, get: function (r, c) { return t[r][c]; },
+          title: '矩阵连乘：m[i][j] = A_i…A_j 的最少乘法次数', sub: extra.sub || '', markR: extra.markR, markC: extra.markC, note: extra.note || '' };
+      }
+      for (var i = 1; i <= n; i++) { tab[i][i] = { v: '0', cls: 'done' }; }
+      push(steps, [1], '边界：单个矩阵无需相乘，m[i][i] = 0（对角线填 0）。维度序列 d = [' + d.join(', ') + ']，共 ' + n + ' 个矩阵。',
+        snapT({ sub: '初始化对角线' }));
+      for (var len = 2; len <= n; len++) {
+        for (i = 1; i <= n - len + 1; i++) {
+          var j = i + len - 1;
+          var best = Infinity, bestK = -1;
+          for (var k = i; k < j; k++) {
+            var q = m[i][k] + m[k + 1][j] + d[i - 1] * d[k] * d[j];
+            var better = q < best;
+            tab[i][k].cls = 'compare'; tab[k + 1][j].cls = 'compare'; tab[i][j].cls = 'active';
+            push(steps, [5, 6, 7], '区间 A' + i + '…A' + j + '：尝试分割点 k=' + k + ' → m[' + i + ',' + k + ']=' + m[i][k] + ' + m[' + (k + 1) + ',' + j + ']=' + m[k + 1][j] + ' + 标量乘 ' + d[i - 1] + '×' + d[k] + '×' + d[j] + '=' + (d[i - 1] * d[k] * d[j]) + '，共 ' + q + ' 次乘法' + (better ? '（目前最优）' : ''),
+              snapT({ sub: '区间 A' + i + '…A' + j + ' · k=' + k, markR: j - 1, markC: i - 1 }));
+            if (better) { best = q; bestK = k; }
+          }
+          m[i][j] = best; s[i][j] = bestK;
+          tab[i][j] = { v: String(best), cls: 'done' };
+          push(steps, [7, 8], '区间 A' + i + '…A' + j + ' 的最优分割点 k=' + bestK + '，最少乘法次数 m[' + i + ',' + j + '] = ' + best + '。',
+            snapT({ sub: '确定 m[' + i + ',' + j + ']', markR: j - 1, markC: i - 1, note: 's[' + i + ',' + j + '] = ' + bestK }));
+        }
+      }
+      function paren(i, j) { return i === j ? 'A' + i : '(' + paren(i, s[i][j]) + '×' + paren(s[i][j] + 1, j) + ')'; }
+      push(steps, [8], '回溯 s 表得到最优括号化：' + paren(1, n) + '，最少乘法次数 = ' + m[1][n] + '。',
+        snapT({ sub: '完成', markR: n - 1, markC: 0, note: '最优 = ' + m[1][n] + ' 次乘法' }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__t', S.text(500, 30, '矩阵连乘', 'vt')); kr.end(); return; }
+      if (s.warn) { kr.html('__e', S.text(500, 280, s.msg || '', 'vs')); kr.end(); return; }
+      dpGrid(kr, s);
+    }
+  });
+
+  /* ============================================================
+     7. 最长递增子序列 LIS
+     ============================================================ */
+  DSV.register({
+    id: 'dp-lis', name: '最长递增子序列', category: '动态规划',
+    desc: 'dp[i] = 以 a[i] 结尾的最长递增子序列长度：dp[i] = 1 + max{dp[j] | j<i 且 a[j]<a[i]}，并用 prev[i] 记录转移来源。时间 O(n²)，空间 O(n)，再沿 prev 回溯出一条 LIS。',
+    code: [
+      'dp[i] = 1',
+      'for i = 0 to n-1:',
+      '  for j = 0 to i-1:',
+      '    if a[j] < a[i] 且 dp[j]+1 > dp[i]:',
+      '      dp[i] = dp[j] + 1; prev[i] = j',
+      'answer = max(dp[i])',
+      '沿 prev 回溯出一条 LIS'
+    ],
+    viewBox: '0 0 1000 420',
+    inputs: [{ key: 'arr', label: '序列', def: '3,1,4,1,5,9,2,6', hint: '逗号分隔' }],
+    samples: [
+      { label: '示例：经典序列', values: { arr: '3,1,4,1,5,9,2,6' } },
+      { label: '示例：递减序列', values: { arr: '9,8,7,6,5,4' } }
+    ],
+    random: function () {
+      var n = DSV.ri(6, 9), a = [];
+      for (var i = 0; i < n; i++) { a.push(DSV.ri(1, 9)); }
+      return { arr: a.join(',') };
+    },
+    run: function (v) {
+      var a = DSV.nums(v.arr, 12);
+      var n = a.length;
+      var steps = [];
+      if (n < 2) {
+        return [{ code: [1], desc: '输入无效：序列至少 2 个数。', snap: { msg: '序列至少 2 个数', warn: true } }];
+      }
+      var dp = [], prev = [], tab = [];
+      for (var i = 0; i < n; i++) { dp.push(1); prev.push(-1); tab.push([{ v: String(a[i]), cls: '' }, { v: '1', cls: '' }]); }
+      var headC = ['a[i]', 'dp[i]'], headR = [];
+      for (var c = 0; c < n; c++) { headR.push(String(c)); }
+      function snapT(extra) {
+        extra = extra || {};
+        var t = [];
+        for (var r = 0; r < 2; r++) { t.push([]); for (var c = 0; c < n; c++) { t[r].push({ v: tab[c][r].v, cls: tab[c][r].cls }); } }
+        return { R: 2, C: n, headR: headR, headC: headC, get: function (r, c) { return t[r][c]; },
+          title: '最长递增子序列 LIS', sub: extra.sub || '', markR: extra.markR, markC: extra.markC, note: extra.note || '' };
+      }
+      push(steps, [0], '初始化：每个元素自身构成长度为 1 的递增子序列，dp[i] = 1。', snapT({ sub: '初始化' }));
+      for (i = 0; i < n; i++) {
+        for (var j = 0; j < i; j++) {
+          tab[j][0].cls = 'compare'; tab[i][0].cls = 'compare';
+          if (a[j] < a[i] && dp[j] + 1 > dp[i]) {
+            push(steps, [3, 4], '比较 a[' + j + ']=' + a[j] + ' 与 a[' + i + ']=' + a[i] + '：前者更小 → 可以接在它后面，dp[' + j + ']+1=' + (dp[j] + 1) + ' > 当前 dp[' + i + ']=' + dp[i] + '，更新！',
+              snapT({ sub: 'i=' + i + ' 与 j=' + j, markC: i }));
+            dp[i] = dp[j] + 1; prev[i] = j;
+            tab[i][1] = { v: String(dp[i]), cls: 'swap' };
+          } else {
+            push(steps, [3, 4], '比较 a[' + j + ']=' + a[j] + ' 与 a[' + i + ']=' + a[i] + '：' +
+              (a[j] < a[i] ? '前者更小但 dp[' + j + ']+1=' + (dp[j] + 1) + ' 不优于 dp[' + i + ']=' + dp[i] : '前者不更小，跳过'),
+              snapT({ sub: 'i=' + i + ' 与 j=' + j, markC: i }));
+          }
+        }
+        tab[i][1] = { v: String(dp[i]), cls: 'done' };
+        push(steps, [5], 'dp[' + i + '] = ' + dp[i] + (prev[i] >= 0 ? '（前驱 = a[' + prev[i] + ']=' + a[prev[i]] + '）' : '，无前驱'),
+          snapT({ sub: '确定 dp[' + i + ']', markC: i }));
+      }
+      var best = 0, bi = 0;
+      for (i = 0; i < n; i++) { if (dp[i] > best) { best = dp[i]; bi = i; } }
+      var lis = [], k = bi;
+      while (k >= 0) { lis.push(k); k = prev[k]; }
+      lis.reverse();
+      lis.forEach(function (idx, q) {
+        tab[idx][0].cls = 'path'; tab[idx][1].cls = 'path';
+        var cur = lis.slice(0, q + 1).map(function (x) { return a[x]; });
+        push(steps, [6], '回溯：沿前驱指针走到 a[' + idx + ']=' + a[idx] + '（第 ' + (q + 1) + ' 个 LIS 元素）。',
+          snapT({ sub: '回溯 LIS（' + (q + 1) + '/' + lis.length + '）', markC: idx, note: '当前 LIS = [' + cur.join(', ') + ']' }));
+      });
+      var lisTxt = lis.map(function (x) { return a[x]; }).join(', ');
+      push(steps, [6], 'LIS 长度 = ' + best + '，一条最长递增子序列为：[' + lisTxt + ']。时间 O(n²)。',
+        snapT({ sub: '完成', markC: bi, note: 'LIS = [' + lisTxt + ']，长度 ' + best }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__t', S.text(500, 30, 'LIS', 'vt')); kr.end(); return; }
+      if (s.warn) { kr.html('__e', S.text(500, 280, s.msg || '', 'vs')); kr.end(); return; }
+      dpGrid(kr, s);
+    }
+  });
+
+  /* ============================================================
+     8. 石子合并（区间 DP）
+     ============================================================ */
+  DSV.register({
+    id: 'dp-stone', name: '石子合并（区间 DP）', category: '动态规划',
+    desc: 'n 堆石子排成一行，每次只能合并相邻两堆，代价 = 合并后新堆的石子数。dp[i][j]=min_k (dp[i][k]+dp[k+1][j]+sum(i..j))，求合成一堆的最小代价。时间 O(n³)，空间 O(n²)。',
+    code: [
+      'dp[i][i] = 0',
+      'for len = 2 to n:',
+      '  for i = 1 to n-len+1:',
+      '    j = i+len-1; dp[i][j] = ∞',
+      '    for k = i to j-1:',
+      '      q = dp[i][k] + dp[k+1][j] + sum(i..j)',
+      '      if q < dp[i][j]: dp[i][j] = q; s[i][j] = k',
+      'return dp[1][n]'
+    ],
+    viewBox: '0 0 1000 620',
+    inputs: [{ key: 'stones', label: '各堆石子数', def: '4,5,6,7', hint: '逗号分隔' }],
+    samples: [
+      { label: '示例：4 堆', values: { stones: '4,5,6,7' } },
+      { label: '示例：5 堆', values: { stones: '1,2,3,4,5' } }
+    ],
+    random: function () {
+      var n = DSV.ri(3, 5), a = [];
+      for (var i = 0; i < n; i++) { a.push(DSV.ri(2, 9)); }
+      return { stones: a.join(',') };
+    },
+    run: function (v) {
+      var a = DSV.nums(v.stones, 7);
+      var n = a.length;
+      var steps = [];
+      if (n < 2) {
+        return [{ code: [1], desc: '输入无效：至少 2 堆石子。', snap: { msg: '石子堆至少 2 堆', warn: true } }];
+      }
+      var pre = [0];
+      for (var p = 0; p < n; p++) { pre.push(pre[p] + a[p]); }
+      function sum(i, j) { return pre[j + 1] - pre[i]; }
+      var dp = [], s = [], tab = [];
+      for (var r = 0; r < n; r++) { dp.push([]); s.push([]); tab.push([]); for (var c = 0; c < n; c++) { dp[r].push(0); s[r].push(-1); tab[r].push({ v: '', cls: '' }); } }
+      var headR = [], headC = [];
+      for (var c = 0; c < n; c++) { headR.push('堆' + (c + 1)); headC.push(String(c + 1)); }
+      function snapT(extra) {
+        extra = extra || {};
+        var t = [];
+        for (var r = 0; r < n; r++) { t.push([]); for (var c = 0; c < n; c++) { t[r].push({ v: tab[r][c].v, cls: tab[r][c].cls }); } }
+        return { R: n, C: n, headR: headR, headC: headC, get: function (r, c) { return t[r][c]; },
+          title: '石子合并（区间 DP）', sub: extra.sub || '', markR: extra.markR, markC: extra.markC, note: extra.note || '' };
+      }
+      for (var i = 0; i < n; i++) { tab[i][i] = { v: '0', cls: 'done' }; }
+      push(steps, [1], '边界：单独一堆不用合并，dp[i][i]=0。石子堆 = [' + a.join(', ') + ']，共 ' + n + ' 堆；区间和 sum(i..j) 用前缀和 O(1) 取出。',
+        snapT({ sub: '初始化' }));
+      for (var len = 2; len <= n; len++) {
+        for (i = 0; i <= n - len; i++) {
+          var j = i + len - 1;
+          var best = Infinity, bestK = -1;
+          for (var k = i; k < j; k++) {
+            var q = dp[i][k] + dp[k + 1][j] + sum(i, j);
+            var better = q < best;
+            tab[i][k].cls = 'compare'; tab[k + 1][j].cls = 'compare'; tab[i][j].cls = 'active';
+            push(steps, [4, 5], '合并区间 堆' + (i + 1) + '…堆' + (j + 1) + '：枚举分割 k=' + (k + 1) + ' → dp[' + (i + 1) + ',' + (k + 1) + ']+dp[' + (k + 2) + ',' + (j + 1) + ']+本区间和 sum=' + sum(i, j) + '，共 ' + q + (better ? '（目前最优）' : ''),
+              snapT({ sub: '区间 堆' + (i + 1) + '…' + (j + 1) + ' · k=' + (k + 1), markR: j, markC: i }));
+            if (better) { best = q; bestK = k; }
+          }
+          dp[i][j] = best; s[i][j] = bestK;
+          tab[i][j] = { v: String(best), cls: 'done' };
+          push(steps, [6], '区间 堆' + (i + 1) + '…堆' + (j + 1) + ' 的最小合并代价 dp = ' + best + '（最优分割点 k=' + (bestK + 1) + '，最后一次合并的代价 = sum=' + sum(i, j) + '）。',
+            snapT({ sub: '确定 dp[' + (i + 1) + ',' + (j + 1) + ']', markR: j, markC: i, note: 's[' + (i + 1) + ',' + (j + 1) + ']=' + (bestK + 1) }));
+        }
+      }
+      push(steps, [7], '全部合并成一堆的最小代价 = ' + dp[0][n - 1] + '。',
+        snapT({ sub: '完成', markR: n - 1, markC: 0, note: '最小代价 = ' + dp[0][n - 1] }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__t', S.text(500, 30, '石子合并', 'vt')); kr.end(); return; }
+      if (s.warn) { kr.html('__e', S.text(500, 280, s.msg || '', 'vs')); kr.end(); return; }
+      dpGrid(kr, s);
+    }
+  });
+
 })();

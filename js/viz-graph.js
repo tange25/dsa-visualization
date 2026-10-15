@@ -1427,4 +1427,860 @@
     }
   });
 
+  /* ============================================================
+     12. Bellman-Ford 专用工具（允许负权边的有向边表解析 + 随机图）
+     ------------------------------------------------------------ */
+  function parseBF(str) {
+    var toks = String(str == null ? '' : str)
+      .split(/[\s,，;；、\/|\n\r]+/).filter(function (t) { return t !== ''; });
+    var edges = [], seen = {}, i = 0;
+    while (i < toks.length && edges.length < 30) {
+      var u = toks[i++];
+      if (i >= toks.length) { break; }
+      var v = toks[i++];
+      var w = 1;
+      if (i < toks.length && isNumTok(toks[i])) {
+        var nw = Number(toks[i]);
+        if (isFinite(nw)) { w = nw; i++; }
+      }
+      if (!u || !v) { continue; }
+      var key = u + '>' + v;
+      if (seen[key]) { continue; }
+      seen[key] = 1;
+      edges.push({ u: u, v: v, w: w });
+    }
+    var set = {};
+    edges.forEach(function (e) { set[e.u] = 1; set[e.v] = 1; });
+    var verts = Object.keys(set).sort();
+    if (verts.length > 10) { verts = verts.slice(0, 10); }
+    var keep = {};
+    verts.forEach(function (x) { keep[x] = 1; });
+    edges = edges.filter(function (e) { return keep[e.u] && keep[e.v]; });
+    var adj = {};
+    verts.forEach(function (x) { adj[x] = []; });
+    edges.forEach(function (e, idx) { adj[e.u].push({ v: e.v, w: e.w, i: idx }); });
+    return { verts: verts, edges: edges, adj: adj, directed: true };
+  }
+  /* DAG（按随机拓扑序只连前向边）+ 负权边：不会出现负环，Bellman-Ford 一定收敛 */
+  function rndBF() {
+    var n = DSV.ri(5, 7), verts = [], i;
+    for (i = 0; i < n; i++) { verts.push(String.fromCharCode(65 + i)); }
+    var ord = DSV.shuffle(verts), seen = {}, lines = [];
+    function add(a, b) {
+      if (a === b) { return; }
+      var k = a + '>' + b;
+      if (seen[k]) { return; }
+      seen[k] = 1;
+      lines.push(a + ' ' + b + ' ' + DSV.ri(-3, 9));
+    }
+    for (i = 1; i < n; i++) { add(ord[DSV.ri(0, i - 1)], ord[i]); }
+    var guard = 0;
+    while (lines.length < DSV.ri(8, 10) && guard++ < 200) {
+      var a = DSV.ri(0, n - 1), b = DSV.ri(0, n - 1);
+      if (a !== b) { add(ord[a], ord[b]); }
+    }
+    return lines.join('\n');
+  }
+
+  /* ============================================================
+     13. 关键路径（AOE 网）
+     ============================================================ */
+  DSV.register({
+    id: 'grp-aoe', name: '关键路径（AOE 网）', category: CAT,
+    desc: 'AOE 网是带权有向无环图：顶点=事件，边=活动，权=持续时间。ve[v]=事件 v 的最早发生时间（前驱 ve+权 的最大值），vl[v]=最迟发生时间（后继 vl−权 的最小值）；满足 ve[u]+w==vl[v] 的活动是关键活动，串联起来就是关键路径，其长度=工程最短工期。先拓扑排序，再双向递推，时间 O(V+E)，空间 O(V)。',
+    viewBox: '0 0 1000 740',
+    code: [
+      'criticalPath(G):',
+      '  求拓扑序 topo',
+      '  ve[v] = 0；按 topo 正序：',
+      '    ve[v] = max(ve[u] + w(u→v))',
+      '  vl[v] = ve[终点]；按 topo 逆序：',
+      '    vl[u] = min(vl[v] - w(u→v))',
+      '  关键活动：ve[u] + w == vl[v]',
+      '  关键路径长度 = ve[终点]'
+    ],
+    inputs: [inEdges('A B 3\nA C 2\nB D 5\nC D 1\nB E 4\nD F 2\nE F 6\nC G 3\nG F 1')],
+    samples: [
+      { label: '示例：7 事件 AOE 网', values: { edges: 'A B 3\nA C 2\nB D 5\nC D 1\nB E 4\nD F 2\nE F 6\nC G 3\nG F 1' } },
+      { label: '示例：两条关键路径并列', values: { edges: 'A B 2\nA C 4\nB C 1\nB D 4\nC D 2' } },
+      { label: '示例：含环（无法求关键路径）', values: { edges: CYC + '\nC D 2' } }
+    ],
+    random: function () { return { edges: randomEdges(true) }; },
+    run: function (v) {
+      var g = parseGraph(v.edges, true);
+      if (!g.verts.length) { return []; }
+      var st = [], n = g.verts.length, vi = vmap(g.verts), m = g.edges.length, i;
+      var indeg = [];
+      for (i = 0; i < n; i++) { indeg.push(0); }
+      g.edges.forEach(function (e) { indeg[vi[e.v]]++; });
+      var ve = [], vl = [], vc = clsArr(n), ec = clsArr(m);
+      for (i = 0; i < n; i++) { ve.push(0); vl.push(0); }
+      function snap(sub) {
+        var vs = [];
+        for (var t = 0; t < n; t++) { vs[t] = 've=' + ve[t] + ' / vl=' + vl[t]; }
+        return {
+          verts: g.verts, edges: g.edges, vc: vc.slice(), ec: ec.slice(), vsub: vs,
+          directed: true, weighted: true, title: '关键路径 AOE（有向带权 DAG）',
+          sub: sub || '', warn: '', ve: ve.slice(), vl: vl.slice()
+        };
+      }
+      push(st, [0, 1], '初始化：共 ' + n + ' 个事件（顶点）、' + m + ' 项活动（边，权=持续时间），ve 全部置 0。第一步先求拓扑序',
+        snap('第一步：求拓扑序'));
+      var indeg2 = indeg.slice(), q = [], topo = [];
+      for (i = 0; i < n; i++) { if (indeg2[i] === 0) { q.push(i); } }
+      while (q.length) {
+        var u = q.shift();
+        topo.push(u); vc[u] = 'active';
+        push(st, [1], '取入度为 0 的事件 ' + g.verts[u] + '，加入拓扑序列：' +
+          topo.map(function (x) { return g.verts[x]; }).join(' → '), snap('输出事件 ' + g.verts[u]));
+        vc[u] = 'done';
+        var nb = g.adj[g.verts[u]] || [];
+        for (var t = 0; t < nb.length; t++) {
+          var w = nb[t].v, wi = vi[w], ei = nb[t].i;
+          indeg2[wi]--; ec[ei] = 'done';
+          push(st, [1], '删去活动 ' + g.verts[u] + ' → ' + w + '，事件 ' + w + ' 的入度变为 ' + indeg2[wi] +
+            (indeg2[wi] === 0 ? '（变为 0，可以入队）' : ''), snap('删边 ' + g.verts[u] + '→' + w));
+          if (indeg2[wi] === 0) { q.push(wi); }
+        }
+      }
+      if (topo.length < n) {
+        var cyc = [];
+        for (i = 0; i < n; i++) { if (topo.indexOf(i) < 0) { cyc.push(g.verts[i]); vc[i] = 'dead'; } }
+        var s0 = snap('存在环');
+        s0.warn = '图中存在环，不是 AOE 网！剩余事件：' + cyc.join('，');
+        push(st, [1], '队列已空但只排出 ' + topo.length + '/' + n + ' 个事件，剩余 ' + cyc.join('，') +
+          ' 的入度始终不为 0，说明图中有环，无法求关键路径', s0);
+        return st;
+      }
+      /* ---- 正向求 ve ---- */
+      push(st, [2, 3], '拓扑序：' + topo.map(function (x) { return g.verts[x]; }).join(' → ') +
+        '。开始按拓扑序正序求最早发生时间 ve[v] = max{ ve[u] + w(u→v) }，源点 ve=0', snap('第二步：求 ve[]'));
+      for (var k = 0; k < topo.length; k++) {
+        var u2 = topo[k]; vc[u2] = 'active';
+        var nb2 = g.adj[g.verts[u2]] || [];
+        for (var t2 = 0; t2 < nb2.length; t2++) {
+          var e2 = nb2[t2], wi2 = vi[e2.v], ei2 = e2.i;
+          var cand = ve[u2] + e2.w;
+          ec[ei2] = 'hl';
+          if (cand > ve[wi2]) {
+            push(st, [3], '活动 ' + g.verts[u2] + ' → ' + e2.v + '（权 ' + e2.w + '）：ve[' + g.verts[u2] + ']+w = ' +
+              ve[u2] + '+' + e2.w + ' = ' + cand + '，刷新 ve[' + e2.v + '] = ' + cand, snap('更新 ve[' + e2.v + ']=' + cand));
+            ve[wi2] = cand; ec[ei2] = 'path';
+          } else {
+            push(st, [3], '活动 ' + g.verts[u2] + ' → ' + e2.v + '（权 ' + e2.w + '）：' + ve[u2] + '+' + e2.w + ' = ' +
+              cand + ' ≤ ve[' + e2.v + '] = ' + ve[wi2] + '，不能提前，不刷新', snap('ve[' + e2.v + '] 保持 ' + ve[wi2]));
+            ec[ei2] = '';
+          }
+        }
+        vc[u2] = 'done';
+      }
+      /* ---- 逆向求 vl ---- */
+      var sink = topo[topo.length - 1];
+      for (i = 0; i < n; i++) { vl[i] = ve[sink]; }
+      vc = clsArr(n); ec = clsArr(m);
+      push(st, [4], '最早时间 ve 全部求出：工程终点 ' + g.verts[sink] + ' 的最早时间 = ' + ve[sink] +
+        '。开始按拓扑序逆序求最迟时间 vl[u] = min{ vl[v] - w(u→v) }，先令所有 vl = ve[终点] = ' + ve[sink],
+        snap('第三步：求 vl[]'));
+      for (k = topo.length - 1; k >= 0; k--) {
+        var u3 = topo[k]; vc[u3] = 'active';
+        for (i = 0; i < m; i++) {
+          var e3 = g.edges[i];
+          if (vi[e3.v] !== u3) { continue; }
+          var ui3 = vi[e3.u];
+          ec[i] = 'hl';
+          var cand2 = vl[u3] - e3.w;
+          if (cand2 < vl[ui3]) {
+            push(st, [5], '活动 ' + e3.u + ' → ' + e3.v + '（权 ' + e3.w + '）：vl[' + e3.v + ']-w = ' +
+              vl[u3] + '-' + e3.w + ' = ' + cand2 + '，刷新 vl[' + e3.u + '] = ' + cand2, snap('更新 vl[' + e3.u + ']=' + cand2));
+            vl[ui3] = cand2; ec[i] = 'swap';
+          } else {
+            push(st, [5], '活动 ' + e3.u + ' → ' + e3.v + '（权 ' + e3.w + '）：' + vl[u3] + '-' + e3.w + ' = ' +
+              cand2 + ' ≥ vl[' + e3.u + '] = ' + vl[ui3] + '，不必推迟，不刷新', snap('vl[' + e3.u + '] 保持 ' + vl[ui3]));
+            ec[i] = '';
+          }
+        }
+        vc[u3] = 'done';
+      }
+      /* ---- 关键活动判定 ---- */
+      var crit = [];
+      for (i = 0; i < m; i++) {
+        var e4 = g.edges[i];
+        if (ve[vi[e4.u]] + e4.w === vl[vi[e4.v]]) { crit.push(i); ec[i] = 'path'; }
+        else { ec[i] = ''; }
+      }
+      vc = clsArr(n);
+      for (i = 0; i < n; i++) { if (ve[i] === vl[i]) { vc[i] = 'path'; } }
+      push(st, [6, 7], 've 与 vl 都求完了。逐活动判断 ve[u]+w == vl[v]：关键活动 = ' +
+        (crit.length ? crit.map(function (x) { return g.edges[x].u + '→' + g.edges[x].v; }).join('，') : '（没有）') +
+        '。金色边=关键活动，金色事件=ve==vl；关键路径总工期 = ve[终点] = ' + ve[sink], snap('关键路径已标出'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」求关键路径）', 'vs')); kr.end(); return; }
+      base(kr, s, 706);
+      var vr = [], lr = [];
+      for (var i = 0; i < s.verts.length; i++) {
+        vr.push({ v: String(s.ve[i]), cls: s.ve[i] === s.vl[i] ? 'path' : '', m: s.verts[i] });
+        lr.push({ v: String(s.vl[i]), cls: s.ve[i] === s.vl[i] ? 'path' : '', m: s.verts[i] });
+      }
+      drawRow(kr, '__ve', 've：事件最早发生时间（格子下方是事件名）', vr, 556, { cw: 44 });
+      drawRow(kr, '__vl', 'vl：事件最迟发生时间', lr, 632, { cw: 44 });
+      kr.html('__cp', S.text(500, 694, '金色 = 关键活动 / 关键事件（ve[u]+w == vl[v]），关键路径长度 = 工程最短工期', 'vs'));
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     14. Bellman-Ford 最短路（允许负权边，可检测负权环）
+     ============================================================ */
+  DSV.register({
+    id: 'grp-bellman-ford', name: 'Bellman-Ford 最短路', category: CAT,
+    desc: '与 Dijkstra 不同，Bellman-Ford 每轮都按边表顺序对全部边做松弛 dist[v]=min(dist[v], dist[u]+w)，重复 |V|-1 轮即可收敛（允许负权边）；再做一轮若仍能松弛，说明存在总权为负的环，最短路无下界。时间 O(V·E)，空间 O(V)。',
+    viewBox: '0 0 1000 740',
+    code: [
+      'Bellman-Ford(G, s):',
+      '  dist[s] = 0；其余 dist = ∞',
+      '  for round = 1 to |V|-1:',
+      '    for 每条边 (u,v,w):',
+      '      if dist[u] + w < dist[v]:',
+      '        dist[v] = dist[u] + w',
+      '  再做一轮：仍能松弛 → 存在负权环'
+    ],
+    inputs: [inEdges('A B 4\nA C 5\nB C -3\nC D 2\nB D 6'), inStart('A')],
+    samples: [
+      { label: '示例：含负权边', values: { edges: 'A B 4\nA C 5\nB C -3\nC D 2\nB D 6', start: 'A' } },
+      { label: '示例：存在负权环', values: { edges: 'A B 2\nB C -5\nC A 1\nC D 3', start: 'A' } },
+      { label: '示例：三角形小图', values: { edges: 'A B 4\nB C -1\nA C 2', start: 'A' } }
+    ],
+    random: function () { return { edges: rndBF(), start: 'A' }; },
+    run: function (v) {
+      var g = parseBF(v.edges);
+      if (!g.verts.length) { return []; }
+      var st = [], n = g.verts.length, vi = vmap(g.verts), m = g.edges.length, i;
+      var start = (v.start && vi[v.start] != null) ? v.start : g.verts[0];
+      var dist = [], vc = clsArr(n), ec = clsArr(m);
+      for (i = 0; i < n; i++) { dist.push(INF()); }
+      dist[vi[start]] = 0;
+      function snap(sub) {
+        var ds = [];
+        for (var t = 0; t < n; t++) {
+          ds.push({ v: distTxt(dist[t]), cls: vc[t] || '', m: g.verts[t] });
+        }
+        return {
+          verts: g.verts, edges: g.edges, vc: vc.slice(), ec: ec.slice(), vsub: [],
+          directed: true, weighted: true, title: 'Bellman-Ford 最短路（源点 ' + start + '，允许负权边）',
+          sub: sub || '', warn: '', dist: ds
+        };
+      }
+      push(st, [0, 1], '初始化：dist[' + start + '] = 0，其余顶点 dist = ∞。共 ' + n + ' 个顶点，最多做 ' + (n - 1) + ' 轮松弛',
+        snap('初始化 dist 数组'));
+      var finished = false;
+      for (var round = 1; round <= n - 1 && !finished; round++) {
+        var upd = 0;
+        push(st, [2, 3], '—— 第 ' + round + ' 轮松弛：按边表顺序依次检查全部 ' + m + ' 条边 ——', snap('第 ' + round + ' 轮开始'));
+        for (i = 0; i < m; i++) {
+          var e = g.edges[i], ui = vi[e.u], wi = vi[e.v];
+          if (dist[ui] === INF()) {
+            ec[i] = 'hl';
+            push(st, [3], '边 ' + e.u + ' → ' + e.v + '（权 ' + e.w + '）：dist[' + e.u + '] = ∞（源点到不了），跳过',
+              snap('跳过 ' + e.u + '→' + e.v));
+            ec[i] = '';
+            continue;
+          }
+          var nd = dist[ui] + e.w, old = dist[wi];
+          ec[i] = 'hl'; vc[ui] = 'compare';
+          if (nd < old) {
+            vc[wi] = 'swap';
+            push(st, [4, 5], '松弛边 ' + e.u + ' → ' + e.v + '（权 ' + e.w + '）：dist[' + e.u + ']+w = ' +
+              distTxt(dist[ui]) + '+' + e.w + ' = ' + nd + ' < dist[' + e.v + '] = ' + distTxt(old) +
+              '，于是更新 dist[' + e.v + '] = ' + nd, snap('更新 dist[' + e.v + '] = ' + nd));
+            dist[wi] = nd; upd++; ec[i] = 'path';
+          } else {
+            push(st, [4], '松弛边 ' + e.u + ' → ' + e.v + '（权 ' + e.w + '）：' + distTxt(dist[ui]) + '+' + e.w + ' = ' +
+              nd + ' ≥ dist[' + e.v + '] = ' + distTxt(old) + '，不更新', snap('dist[' + e.v + '] 不变'));
+            ec[i] = '';
+          }
+          vc[ui] = ''; vc[wi] = '';
+        }
+        push(st, [2], '第 ' + round + ' 轮结束：本轮共松弛 ' + upd + ' 次。当前 dist：' +
+          g.verts.map(function (x, k) { return x + '=' + distTxt(dist[k]); }).join('，'), snap('第 ' + round + ' 轮结束'));
+        if (upd === 0) {
+          push(st, [2], '本轮一条边都没能松弛，说明距离已全部收敛，提前结束（只跑了 ' + round + ' 轮）', snap('提前收敛'));
+          finished = true;
+        }
+      }
+      var cyc = null;
+      for (i = 0; i < m; i++) {
+        var e2 = g.edges[i];
+        if (dist[vi[e2.u]] !== INF() && dist[vi[e2.u]] + e2.w < dist[vi[e2.v]]) { cyc = e2; ec[i] = 'swap'; break; }
+      }
+      if (cyc) {
+        var s2 = snap('存在负权环！');
+        s2.warn = '检测到负权环：还能继续松弛，最短距离无下界！';
+        push(st, [6], '最后再检查一轮：边 ' + cyc.u + ' → ' + cyc.v + ' 仍能松弛（dist[' + cyc.u + ']+' + cyc.w +
+          ' < dist[' + cyc.v + ']），说明图中存在总权为负的环，最短路无意义', s2);
+      } else {
+        push(st, [6], '最后一轮检查没有任何边能继续松弛，全部最短距离已求出（∞ 表示从源点不可达）：' +
+          g.verts.map(function (x, k) { return x + '=' + distTxt(dist[k]); }).join('，'), snap('最短路求解完成'));
+      }
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」运行 Bellman-Ford）', 'vs')); kr.end(); return; }
+      base(kr, s, 706);
+      drawRow(kr, '__h', '顶点', s.verts.map(function (x) { return { v: x, cls: '' }; }), 556, { cw: 44 });
+      drawRow(kr, '__d', 'dist：源点到该顶点当前已知最短距离', s.dist, 632, { cw: 44 });
+      kr.html('__note', S.text(500, 694, '金色边 = 本轮发生松弛的边；负权边也能处理，但图中不能有负权环', 'vs'));
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     15. 最大流 Edmonds-Karp（BFS 找增广路）
+     ============================================================ */
+  DSV.register({
+    id: 'grp-maxflow', name: '最大流（Edmonds-Karp）', category: CAT,
+    desc: '把每条边看成「正向剩余容量 c−f」与「反向退流容量 f」：反复用 BFS 在残留网络里找源 s 到汇 t 的增广路，取路上剩余容量的最小值（瓶颈）增广流量；找不到增广路时总流量即最大流。时间 O(V·E²)，空间 O(V+E)。',
+    viewBox: '0 0 1000 740',
+    code: [
+      'EdmondsKarp(G, s, t):',
+      '  残留网络：正向 c-f，反向 f',
+      '  while BFS 在残留网络中找到 s→t 的路:',
+      '    bottleneck = 路上最小剩余容量',
+      '    沿增广路 f += bottleneck（反向即退流）',
+      '    总流量 += bottleneck',
+      '  总流量 = 最大流（= 最小割容量）'
+    ],
+    inputs: [inEdges('A B 3\nA C 2\nB C 1\nB D 3\nC E 4\nD E 1\nD F 2\nE F 3'), inStart('A'), inEnd('F')],
+    samples: [
+      { label: '示例：8 边流网络', values: { edges: 'A B 3\nA C 2\nB C 1\nB D 3\nC E 4\nD E 1\nD F 2\nE F 3', start: 'A', end: 'F' } },
+      { label: '示例：小图', values: { edges: 'A B 5\nA C 4\nB C 2\nB D 3\nC D 5', start: 'A', end: 'D' } },
+      { label: '示例：两条并联路', values: { edges: 'A B 2\nA C 3\nB D 2\nC D 3', start: 'A', end: 'D' } }
+    ],
+    random: function () {
+      var edges = randomEdges(true);
+      var g = parseGraph(edges, true);
+      return { edges: edges, start: g.verts[0], end: g.verts[g.verts.length - 1] };
+    },
+    run: function (v) {
+      var g = parseGraph(v.edges, true);
+      if (!g.verts.length) { return []; }
+      var st = [], n = g.verts.length, vi = vmap(g.verts), m = g.edges.length, i;
+      var start = (v.start && vi[v.start] != null) ? v.start : g.verts[0];
+      var end = (v.end && vi[v.end] != null) ? v.end : g.verts[n - 1];
+      var flow = [];
+      for (i = 0; i < m; i++) { flow.push(0); }
+      var total = 0, augs = [], curPath = [];
+      function snap(sub) {
+        var es = g.edges.map(function (e, k) { return { u: e.u, v: e.v, w: flow[k] + '/' + e.w }; });
+        var ec2 = clsArr(m);
+        for (var k = 0; k < m; k++) {
+          if (curPath.indexOf(k) >= 0) { ec2[k] = 'path'; }
+          else if (flow[k] > 0) { ec2[k] = 'done'; }
+        }
+        return {
+          verts: g.verts, edges: es, vc: clsArr(n), ec: ec2, vsub: [],
+          directed: true, weighted: true, title: '最大流 Edmonds-Karp（源 ' + start + ' → 汇 ' + end + '，标签=流量/容量）',
+          sub: sub || '', warn: '', total: total,
+          lines: augs.map(function (a, k) { return '第 ' + (k + 1) + ' 条增广路：' + a.path.join(' → ') + '，瓶颈 ' + a.bn; })
+        };
+      }
+      push(st, [0, 1], '初始化：所有边流量 f=0，残留网络正方向剩余容量=原容量，反方向退流容量=0。画面边标签显示「当前流量/容量」',
+        snap('初始残留网络'));
+      var guard = 0;
+      while (guard++ < 60) {
+        /* ---- 在残留网络上 BFS ---- */
+        var vis = [], prevV = [], prevE = [];
+        for (i = 0; i < n; i++) { vis.push(false); prevV.push(-1); prevE.push(-1); }
+        var q = [vi[start]]; vis[vi[start]] = true;
+        while (q.length) {
+          var u = q.shift();
+          var nb = g.adj[g.verts[u]] || [];
+          for (var t = 0; t < nb.length; t++) {
+            var e = nb[t], ei = e.i, wi = vi[e.v];
+            var fwd = g.edges[ei].w - flow[ei];
+            if (!vis[wi] && fwd > 0) { vis[wi] = true; prevV[wi] = u; prevE[wi] = ei * 2; q.push(wi); }
+          }
+          for (i = 0; i < m; i++) {
+            var e2 = g.edges[i];
+            if (vi[e2.v] === u && flow[i] > 0 && !vis[vi[e2.u]]) {
+              vis[vi[e2.u]] = true; prevV[vi[e2.u]] = u; prevE[vi[e2.u]] = i * 2 + 1; q.push(vi[e2.u]);
+            }
+          }
+        }
+        if (!vis[vi[end]]) {
+          curPath = [];
+          push(st, [2], 'BFS 从 ' + start + ' 出发，残留网络里已经走不到 ' + end + '，不存在更多增广路，算法结束',
+            snap('无增广路，结束'));
+          break;
+        }
+        /* ---- 回溯增广路 ---- */
+        var pathV = [], pathE = [], dirs = [];
+        var cur = vi[end];
+        while (cur !== vi[start]) {
+          var pe = prevE[cur];
+          pathE.unshift(Math.floor(pe / 2));
+          dirs.unshift(pe % 2);
+          pathV.unshift(g.verts[cur]);
+          cur = prevV[cur];
+        }
+        pathV.unshift(start);
+        var bn = INF();
+        for (i = 0; i < pathE.length; i++) {
+          var ei = pathE[i];
+          var r = dirs[i] ? flow[ei] : (g.edges[ei].w - flow[ei]);
+          if (r < bn) { bn = r; }
+        }
+        curPath = pathE.slice();
+        push(st, [2, 3], 'BFS 在残留网络中找到一条增广路：' + pathV.join(' → ') +
+          '（BFS 保证这是经过边数最少的路）', snap('增广路：' + pathV.join(' → ')));
+        push(st, [3], '计算瓶颈：路上各边剩余容量取最小值 = ' + bn + '，本次增广最多推进 ' + bn + ' 个单位流量',
+          snap('瓶颈 = ' + bn));
+        for (i = 0; i < pathE.length; i++) {
+          if (dirs[i]) { flow[pathE[i]] -= bn; }   // 反向边：退流
+          else { flow[pathE[i]] += bn; }
+        }
+        total += bn;
+        augs.push({ path: pathV.slice(), bn: bn });
+        push(st, [4, 5], '沿增广路增广 ' + bn + ' 个单位：总流量 = ' + total + '。各边标签更新为「流量/容量」',
+          snap('增广后总流量 = ' + total));
+        curPath = [];
+      }
+      push(st, [6], '最大流 = ' + total + '（即源点 ' + start + ' 的总流出）。共进行 ' + augs.length +
+        ' 轮增广。根据最大流-最小割定理，这个值也是把 s 与 t 分开的最小割容量。时间 O(V·E²)。', snap('最大流 = ' + total));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」求最大流）', 'vs')); kr.end(); return; }
+      base(kr, s, 706);
+      kr.html('__tt', S.text(500, 552, '当前总流量 = ' + s.total, 'vt'));
+      kr.html('__lt', S.text(500, 576, '各轮增广记录（下方为瓶颈值）', 'vs'));
+      drawLines(kr, '__ls', s.lines || [], 602, 22, 5);
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     16. Tarjan 强连通分量
+     ============================================================ */
+  DSV.register({
+    id: 'grp-tarjan', name: 'Tarjan 强连通分量', category: CAT,
+    desc: '有向图中，互相可达的顶点构成一个强连通分量（SCC）。Tarjan 用一次 DFS：dfn[u]=发现时间，low[u]=从 u 的子孙出发、经一条回边能到达的最小 dfn；当 low[u]==dfn[u] 时，递归栈顶到 u 的全部顶点属于同一个 SCC。时间 O(V+E)，空间 O(V)。',
+    viewBox: '0 0 1000 740',
+    code: [
+      'Tarjan(u):',
+      '  dfn[u] = low[u] = ++time; 压入栈',
+      '  for v in adj[u]:',
+      '    if v 未访问: Tarjan(v); low[u]=min(low[u],low[v])',
+      '    else if v 在栈中: low[u]=min(low[u],dfn[v])',
+      '  if low[u] == dfn[u]:',
+      '    弹出栈顶到 u，组成一个 SCC'
+    ],
+    inputs: [inEdges('A B\nB C\nC A\nC D\nD E\nE D\nE F')],
+    samples: [
+      { label: '示例：3 个 SCC', values: { edges: 'A B\nB C\nC A\nC D\nD E\nE D\nE F' } },
+      { label: '示例：链式（每点一个 SCC）', values: { edges: 'A B\nB C\nC D' } },
+      { label: '示例：两个双节点环', values: { edges: 'A B\nB A\nB C\nC D\nD C' } }
+    ],
+    random: function () {
+      var n = DSV.ri(5, 7), verts = [], i;
+      for (i = 0; i < n; i++) { verts.push(String.fromCharCode(65 + i)); }
+      var ord = DSV.shuffle(verts), seen = {}, lines = [];
+      function add(a, b) {
+        if (a === b) { return; }
+        var k = a + '>' + b;
+        if (seen[k]) { return; }
+        seen[k] = 1;
+        lines.push(a + ' ' + b);
+      }
+      for (i = 1; i < n; i++) { add(ord[DSV.ri(0, i - 1)], ord[i]); }
+      var guard = 0;
+      while (lines.length < DSV.ri(8, 11) && guard++ < 200) {
+        var a = DSV.ri(0, n - 1), b = DSV.ri(0, n - 1);
+        if (a !== b) { add(verts[a], verts[b]); }
+      }
+      return { edges: lines.join('\n') };
+    },
+    run: function (v) {
+      var g = parseGraph(v.edges, true);
+      if (!g.verts.length) { return []; }
+      var st = [], n = g.verts.length, vi = vmap(g.verts), m = g.edges.length, i;
+      var dfn = [], low = [], onStk = {}, stack = [], sccs = [];
+      var vc = clsArr(n), ec = clsArr(m), time = 0;
+      for (i = 0; i < n; i++) { dfn.push(0); low.push(0); }
+      var PAL = ['active', 'compare', 'path', 'done', 'swap'];
+      function snap(sub) {
+        var vs = [];
+        for (var t = 0; t < n; t++) {
+          vs[t] = dfn[t] ? (dfn[t] + '/' + low[t]) : '·';
+        }
+        return {
+          verts: g.verts, edges: g.edges, vc: vc.slice(), ec: ec.slice(), vsub: vs,
+          directed: true, weighted: false, title: 'Tarjan 强连通分量（顶点下方 dfn/low）',
+          sub: sub || '', warn: '',
+          stack: stack.map(function (x, k) { return { v: x, cls: k === stack.length - 1 ? 'active' : 'compare' }; }),
+          lines: sccs.map(function (c, k) { return 'SCC #' + (k + 1) + '：' + c.join('，'); })
+        };
+      }
+      function dfs(u) {
+        var ui = vi[u];
+        dfn[ui] = low[ui] = ++time;
+        onStk[u] = true; stack.push(u); vc[ui] = 'active';
+        push(st, [1], '发现顶点 ' + u + '：dfn[' + u + '] = low[' + u + '] = ' + time + '，压入递归栈（栈 = [' + stack.join(' ') + ']）',
+          snap('发现 ' + u));
+        var nb = g.adj[u] || [];
+        for (var t = 0; t < nb.length; t++) {
+          var w = nb[t].v, ei = nb[t].i, wi = vi[w];
+          ec[ei] = 'hl';
+          if (!dfn[wi]) {
+            push(st, [3], '边 ' + u + ' → ' + w + '：' + w + ' 还未访问，这是树边，递归进入 ' + w, snap('递归进入 ' + w));
+            ec[ei] = 'path';
+            dfs(w);
+            low[ui] = Math.min(low[ui], low[wi]);
+            push(st, [4], '从 ' + w + ' 回溯到 ' + u + '：low[' + u + '] = min(low[' + u + '], low[' + w + ']=' + low[wi] + ') = ' + low[ui],
+              snap('回溯更新 low[' + u + ']'));
+          } else if (onStk[w]) {
+            low[ui] = Math.min(low[ui], dfn[wi]);
+            ec[ei] = 'swap';
+            push(st, [5], '边 ' + u + ' → ' + w + '：' + w + ' 已访问且仍在栈中（回边/横叉边），low[' + u + '] = min(low[' + u + '], dfn[' + w + ']=' + dfn[wi] + ') = ' + low[ui],
+              snap('用 dfn[' + w + '] 更新 low[' + u + ']'));
+          } else {
+            push(st, [3], '边 ' + u + ' → ' + w + '：' + w + ' 已访问且不在栈中（已输出为别的 SCC），跳过',
+              snap('跳过已输出的 ' + w));
+            ec[ei] = '';
+          }
+        }
+        if (low[ui] === dfn[ui]) {
+          var comp = [];
+          while (true) {
+            var x = stack.pop();
+            onStk[x] = false;
+            comp.push(x);
+            if (x === u) { break; }
+          }
+          sccs.push(comp);
+          var cid = sccs.length - 1;
+          comp.forEach(function (x) { vc[vi[x]] = PAL[cid % PAL.length]; });
+          push(st, [6], 'low[' + u + '] == dfn[' + u + ']（=' + dfn[ui] + '）：从栈顶弹到 ' + u + '，这些顶点互相可达，组成 SCC #' +
+            (cid + 1) + '：{' + comp.join('，') + '}', snap('输出 SCC #' + (cid + 1) + '：{' + comp.join('，') + '}'));
+        } else {
+          vc[ui] = 'compare';
+          push(st, [6], 'low[' + u + ']=' + low[ui] + ' < dfn[' + u + ']=' + dfn[ui] + '：' + u + ' 还在某个更大的 SCC 里，留在栈中',
+            snap(u + ' 留在栈中'));
+        }
+      }
+      push(st, [0], '初始化：所有顶点 dfn/low 为 0，递归栈为空，从字典序第一个顶点开始 DFS', snap('初始化'));
+      for (i = 0; i < n; i++) {
+        if (!dfn[i]) {
+          push(st, [0], '顶点 ' + g.verts[i] + ' 尚未访问，从它开始一轮 DFS', snap('从 ' + g.verts[i] + ' 开始'));
+          dfs(g.verts[i]);
+        }
+      }
+      push(st, [6], 'DFS 全部结束：共求出 ' + sccs.length + ' 个强连通分量。把每个 SCC 缩成一个点后，得到的就是一个有向无环图。',
+        snap('全部 SCC 求出'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」求强连通分量）', 'vs')); kr.end(); return; }
+      base(kr, s, 706);
+      drawRow(kr, '__st', '递归栈（右端为栈顶 = 当前顶点）', s.stack, 556, { cw: 46 });
+      kr.html('__lt', S.text(500, 596, '已求出的强连通分量', 'vs'));
+      drawLines(kr, '__ls', s.lines || [], 622, 22, 4);
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     17. 欧拉回路（Hierholzer 算法）
+     ============================================================ */
+  DSV.register({
+    id: 'grp-euler', name: '欧拉回路（Hierholzer）', category: CAT,
+    desc: '无向图存在欧拉回路 ⟺ 连通且所有顶点度数为偶数；恰有两个奇度顶点时存在欧拉路径（从一个奇点走到另一个）。Hierholzer：从起点出发沿未走过的边一直走，走不动时把当前顶点拼到回路最前面并回溯，直到用完所有边。时间 O(V+E)。',
+    viewBox: '0 0 1000 740',
+    code: [
+      'Hierholzer(G):',
+      '  检查度数：全偶→回路；恰 2 奇度→路径',
+      '  stack = [起点]',
+      '  while stack 非空:',
+      '    u = 栈顶；若还有未走的边 (u,v):',
+      '      标记该边已用；push(v)',
+      '    else:',
+      '      pop(u)，把 u 拼到回路最前面'
+    ],
+    inputs: [inEdges('A B\nA C\nB C\nC D\nD E\nC E')],
+    samples: [
+      { label: '示例：存在欧拉回路', values: { edges: 'A B\nA C\nB C\nC D\nD E\nC E' } },
+      { label: '示例：存在欧拉路径（两个奇点）', values: { edges: 'A B\nB C\nC D' } },
+      { label: '示例：不连通（无解）', values: { edges: 'A B\nB C\nC A\nD E' } }
+    ],
+    random: function () {
+      var n = DSV.ri(5, 7), verts = [], i;
+      for (i = 0; i < n; i++) { verts.push(String.fromCharCode(65 + i)); }
+      var lines = [];
+      for (i = 0; i < n; i++) { lines.push(verts[i] + ' ' + verts[(i + 1) % n]); }
+      var c = DSV.ri(1, 2);
+      for (i = 0; i < c; i++) {
+        var a = DSV.ri(0, n - 1), b = DSV.ri(0, n - 1);
+        if (a !== b) { lines.push(verts[a] + ' ' + verts[b]); }
+      }
+      return { edges: lines.join('\n') };
+    },
+    run: function (v) {
+      var g = parseGraph(v.edges, false);
+      if (!g.verts.length) { return []; }
+      var st = [], n = g.verts.length, vi = vmap(g.verts), m = g.edges.length, i;
+      var deg = [];
+      for (i = 0; i < n; i++) { deg.push(0); }
+      g.edges.forEach(function (e) { deg[vi[e.u]]++; deg[vi[e.v]]++; });
+      var vc = clsArr(n), ec = clsArr(m), used = [];
+      for (i = 0; i < m; i++) { used.push(false); }
+      function snap(sub) {
+        var vs = [];
+        for (var t = 0; t < n; t++) { vs[t] = '度 ' + deg[t]; }
+        return {
+          verts: g.verts, edges: g.edges, vc: vc.slice(), ec: ec.slice(), vsub: vs,
+          directed: false, weighted: false, title: '欧拉回路 Hierholzer（无向图）',
+          sub: sub || '', warn: ''
+        };
+      }
+      /* ---- 度条件检查 ---- */
+      var odd = [];
+      for (i = 0; i < n; i++) { if (deg[i] % 2 === 1) { odd.push(i); vc[i] = 'compare'; } }
+      push(st, [1], '第一步检查度数：' + g.verts.map(function (x, k) { return x + '=' + deg[k]; }).join('，') +
+        '。奇度顶点有 ' + odd.length + ' 个：' + (odd.length ? odd.map(function (x) { return g.verts[x]; }).join('，') : '无'),
+        snap('度数检查'));
+      if (odd.length === 1 || odd.length > 2) {
+        var s0 = snap('无解');
+        s0.warn = '奇度顶点数 = ' + odd.length + '，既不是 0 也不是 2，不存在欧拉路径/回路！';
+        push(st, [1], '奇度顶点数 = ' + odd.length + '，不满足「0 个或 2 个」的必要条件，图中不存在欧拉路径或回路', s0);
+        return st;
+      }
+      if (odd.length === 2) {
+        push(st, [1], '恰有 2 个奇度顶点（' + g.verts[odd[0]] + '、' + g.verts[odd[1]] + '），存在欧拉路径：' +
+          '必须从其中一个奇点出发、另一个结束', snap('欧拉路径：从 ' + g.verts[odd[0]] + ' 出发'));
+      } else {
+        push(st, [1], '所有顶点度数都是偶数，存在欧拉回路：可从任意顶点出发（取字典序第一个 ' + g.verts[0] + '）',
+          snap('欧拉回路'));
+      }
+      /* ---- 连通性粗检：从起点做一次 DFS ---- */
+      var start = odd.length === 2 ? odd[0] : 0;
+      var seen = {};
+      (function flood(u) {
+        if (seen[u]) { return; }
+        seen[u] = true;
+        (g.adj[u] || []).forEach(function (e) { flood(e.v); });
+      })(g.verts[start]);
+      for (i = 0; i < n; i++) {
+        if (!seen[g.verts[i]]) {
+          var s1 = snap('不连通');
+          s1.warn = '图不连通：' + g.verts[i] + ' 与起点 ' + g.verts[start] + ' 不连通，无欧拉路径！';
+          push(st, [1], '从起点 ' + g.verts[start] + ' 出发遍历不到顶点 ' + g.verts[i] +
+            '：各边所在的连通块互相分离，即使度数满足条件也不存在欧拉路径', s1);
+          return st;
+        }
+      }
+      /* ---- Hierholzer ---- */
+      var stack = [g.verts[start]], route = [];
+      push(st, [2], '开始 Hierholzer：当前路径栈 = [' + g.verts[start] + ']，回路列表为空', snap('出发'));
+      var guard = 0;
+      while (stack.length && guard++ < 400) {
+        var u = stack[stack.length - 1];
+        /* 找一条未走过的关联边 */
+        var found = -1;
+        var nb = g.adj[u] || [];
+        for (var t = 0; t < nb.length; t++) {
+          if (!used[nb[t].i]) { found = nb[t].i; break; }
+        }
+        if (found >= 0) {
+          var e = g.edges[found];
+          var other = (e.u === u) ? e.v : e.u;
+          used[found] = true; ec[found] = 'hl'; vc[vi[u]] = 'active'; vc[vi[other]] = 'compare';
+          push(st, [4, 5], '从 ' + u + ' 沿未走过的边走到 ' + other + '，标记该边已用，' + other + ' 压入路径栈（栈 = [' +
+            stack.concat(other).join(' ') + ']）', snap('边 ' + u + '—' + other + ' 已走'));
+          stack.push(other);
+          ec[found] = 'done';
+        } else {
+          stack.pop(); vc[vi[u]] = 'done';
+          route.unshift(u);
+          push(st, [6, 7], '到了 ' + u + '，它的边都走过了（死路）：把 ' + u + ' 拼到回路列表最前面。回退一步继续找',
+            snap('死路：把 ' + u + ' 拼入回路'));
+        }
+      }
+      /* 最终把走过的边标为 path */
+      for (i = 0; i < m; i++) { ec[i] = used[i] ? 'path' : 'dead dim'; }
+      vc = clsArr(n);
+      push(st, [7], '全部边用完，Hierholzer 结束。得到' + (odd.length ? '欧拉路径' : '欧拉回路') + '：' +
+        route.join(' → ') + (odd.length ? '' : ' → ' + route[0]) + '（共经过 ' + m + ' 条边）。金色边 = 回路中的边。',
+        snap(odd.length ? '欧拉路径完成' : '欧拉回路完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」求欧拉回路）', 'vs')); kr.end(); return; }
+      base(kr, s, 706);
+      kr.html('__note', S.text(500, 560, '顶点下方标注度数；金色边 = 欧拉路径上的边，灰色边 = 未使用（或图不连通部分）', 'vs'));
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     18. 匈牙利算法（二分图最大匹配）
+     ============================================================ */
+  DSV.register({
+    id: 'grp-hungarian', name: '匈牙利算法（二分匹配）', category: CAT,
+    desc: '二分图两边顶点分两列。依次为左部每个顶点 u 找匹配：沿边试探右部 r——r 未匹配就直接配对；r 已匹配给别人，就尝试给那个人重新找一条出路（增广路）。找到增广路则匹配数 +1。时间 O(V·E)，空间 O(V+E)。',
+    viewBox: '0 0 1000 640',
+    code: [
+      'Hungarian(G):',
+      '  matchR[r] = null',
+      '  for u in 左部:',
+      '    visited = 空（右部本轮访问标记）',
+      '    if tryMatch(u): 匹配数 +1',
+      '',
+      'tryMatch(u):',
+      '  for r in adj[u]:',
+      '    if r 未访问:',
+      '      visited[r] = true',
+      '      if matchR[r] == null or tryMatch(matchR[r]):',
+      '        matchR[r] = u; return true',
+      '  return false'
+    ],
+    inputs: [inEdges('A X\nA Y\nB X\nB Z\nC Y\nC Z')],
+    samples: [
+      { label: '示例：3×3 二分图', values: { edges: 'A X\nA Y\nB X\nB Z\nC Y\nC Z' } },
+      { label: '示例：链式匹配', values: { edges: 'A X\nB X\nC X\nC Y' } },
+      { label: '示例：完整匹配', values: { edges: 'A X\nA Z\nB Y\nC X\nC Z' } }
+    ],
+    random: function () {
+      var L = ['A', 'B', 'C', 'D'], R = ['W', 'X', 'Y', 'Z'];
+      var lines = [], i, j;
+      for (i = 0; i < L.length; i++) {
+        var k = DSV.ri(1, 2);
+        var rr = DSV.shuffle(R);
+        for (j = 0; j < k; j++) { lines.push(L[i] + ' ' + rr[j]); }
+      }
+      return { edges: lines.join('\n') };
+    },
+    run: function (v) {
+      var g = parseGraph(v.edges, false);
+      if (!g.verts.length) { return []; }
+      /* 从边表分出左部/右部：按出现顺序，所有 "u" 当左部，"v" 当右部 */
+      var left = [], right = {};
+      g.edges.forEach(function (e) {
+        if (left.indexOf(e.u) < 0) { left.push(e.u); }
+        right[e.v] = 1;
+      });
+      var Rlist = Object.keys(right).sort();
+      var st = [], matchR = {}, matchL = {}, i, j;
+      left.forEach(function (l) { matchL[l] = null; });
+      Rlist.forEach(function (r) { matchR[r] = null; });
+      var visits = {};   // 本轮右部访问标记
+      var curEdges = {}; // edge idx -> cls
+      for (i = 0; i < g.edges.length; i++) { curEdges[i] = ''; }
+      function posOf(x, isLeft) {
+        var arr = isLeft ? left : Rlist;
+        var k = arr.indexOf(x);
+        var cnt = arr.length;
+        var y = cnt === 1 ? 300 : 150 + k * (300 / (cnt - 1));
+        return { x: isLeft ? 220 : 780, y: y };
+      }
+      function snap(sub) {
+        var es = [];
+        for (var k = 0; k < g.edges.length; k++) {
+          var e = g.edges[k], pl = posOf(e.u, true), pr = posOf(e.v, false);
+          es.push({ lx: pl.x, ly: pl.y, rx: pr.x, ry: pr.y, cls: curEdges[k] });
+        }
+        var ls = [], rs = [];
+        for (var a = 0; a < left.length; a++) { ls.push({ name: left[a], x: posOf(left[a], true).x, y: posOf(left[a], true).y, cls: matchL[left[a]] ? 'path' : '' }); }
+        for (var b = 0; b < Rlist.length; b++) { rs.push({ name: Rlist[b], x: posOf(Rlist[b], false).x, y: posOf(Rlist[b], false).y, cls: matchR[Rlist[b]] ? 'path' : '' }); }
+        return {
+          title: '匈牙利算法 · 二分图最大匹配（左部 ' + left.length + ' 个，右部 ' + Rlist.length + ' 个）',
+          sub: sub || '', warn: '', left: ls, right: rs, edges: es,
+          matched: left.filter(function (l) { return matchL[l]; }).map(function (l) { return l + '—' + matchL[l]; })
+        };
+      }
+      function refreshEdges() {
+        for (var k = 0; k < g.edges.length; k++) {
+          var e = g.edges[k];
+          curEdges[k] = (matchL[e.u] === e.v) ? 'path' : '';
+        }
+      }
+      function tryMatch(u, depth) {
+        var nb = g.adj[u] || [];
+        for (var t = 0; t < nb.length; t++) {
+          var r = nb[t].v, ei = nb[t].i;
+          curEdges[ei] = 'hl';
+          if (visits[r]) {
+            push(st, [8, 9], u + ' → ' + r + '：' + r + ' 本轮已访问过（避免来回试探死循环），跳过',
+              snap(depth + '跳过 ' + r));
+            curEdges[ei] = matchL[u] === r ? 'path' : '';
+            continue;
+          }
+          visits[r] = true;
+          if (matchR[r] === null) {
+            matchR[r] = u; matchL[u] = r;
+            refreshEdges();
+            push(st, [10, 11], u + ' → ' + 'r=' + r + '：右部顶点 ' + r + ' 还没匹配，直接配对成功！' +
+              '现在 ' + u + ' — ' + r, snap('匹配成功 ' + u + '—' + r));
+            return true;
+          }
+          push(st, [10], u + ' → ' + r + '：' + r + ' 已经匹配给 ' + matchR[r] +
+            '，尝试为 ' + matchR[r] + ' 重新找另一条出路（增广）', snap('尝试增广'));
+          var ok = tryMatch(matchR[r], depth + '  ');
+          if (ok) {
+            matchR[r] = u; matchL[u] = r;
+            refreshEdges();
+            push(st, [10, 11], '增广成功：把 ' + r + ' 改配给 ' + u + '（原来配它的 ' + matchR[r] +
+              ' 已通过增广路找到新家）', snap('重配 ' + u + '—' + r));
+            return true;
+          }
+          curEdges[ei] = '';
+        }
+        push(st, [12], u + ' 的所有右部邻居都试过了，找不到增广路：' + u + ' 本轮无法匹配', snap(u + ' 匹配失败'));
+        return false;
+      }
+      push(st, [0, 1], '初始化：左部 ' + left.join('、') + '，右部 ' + Rlist.join('、') + '，匹配表 matchR 全空，匹配数 = 0。' +
+        '接下来按左部顺序逐个尝试匹配', snap('初始化匹配为空'));
+      for (i = 0; i < left.length; i++) {
+        var u = left[i];
+        visits = {};
+        push(st, [2, 3], '—— 为左部顶点 ' + u + ' 找匹配（清空右部访问标记 visited）——', snap('尝试匹配 ' + u));
+        var ok = tryMatch(u, '');
+        if (!ok) {
+          push(st, [2], u + ' 匹配失败，它保持未匹配状态，继续处理下一个左部顶点', snap(u + ' 未匹配'));
+        }
+      }
+      push(st, [1], '全部左部顶点处理完。最大匹配 = ' + left.filter(function (l) { return matchL[l]; }).length +
+        ' 对：' + (snap('').matched.length ? snap('').matched.join('，') : '（空）'), snap('最大匹配完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__e', S.text(500, 300, '（尚未开始，点击「开始演示」求最大匹配）', 'vs')); kr.end(); return; }
+      kr.html('__defs', S.arrowDefs());
+      kr.html('__t', S.text(500, 26, s.title, 'vt'));
+      kr.html('__s', S.text(500, 48, s.sub, 'vs'));
+      kr.html('__lt', S.text(220, 96, '左部 L', 'vs'));
+      kr.html('__rt', S.text(780, 96, '右部 R', 'vs'));
+      var ge = kr.g('__he', 'translate(0,0)', 'k');
+      var gn = kr.g('__hn', 'translate(0,0)', 'k');
+      var i;
+      for (i = 0; i < s.edges.length; i++) {
+        var e = s.edges[i];
+        kr.html('he' + i, S.line(e.lx, e.ly, e.rx, e.ry, 'edge ' + e.cls), ge);
+      }
+      for (i = 0; i < s.left.length; i++) {
+        var l = s.left[i];
+        kr.g('nl' + i, 'translate(' + l.x + ',' + l.y + ')', 'k nd ' + l.cls,
+          S.circle(0, 0, 22) + S.text(0, 0, l.name), gn);
+      }
+      for (i = 0; i < s.right.length; i++) {
+        var r = s.right[i];
+        kr.g('nr' + i, 'translate(' + r.x + ',' + r.y + ')', 'k nd ' + r.cls,
+          S.circle(0, 0, 22) + S.text(0, 0, r.name), gn);
+      }
+      kr.html('__mm', S.text(500, 560, '已匹配：' + (s.matched.length ? s.matched.join('，') : '（空）') +
+        '　　金色边 = 当前匹配，高亮边 = 正在试探的增广路', 'vs'));
+      kr.end();
+    }
+  });
+
 })();

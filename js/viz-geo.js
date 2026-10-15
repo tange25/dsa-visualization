@@ -1182,4 +1182,337 @@
     }
   });
 
+  /* ============================================================
+     六、算法 6：凸包 Andrew 单调链
+     ------------------------------------------------------------ */
+  /** 解析多行点集：每行 "x y"，自动去重，最多 12 个点 */
+  function parsePts2(s) {
+    var f = DSV.nums(s, 30), p = [], i;
+    for (i = 0; i + 1 < f.length; i += 2) { p.push([clamp(f[i], -8, 8), clamp(f[i + 1], -6, 6)]); }
+    var seen = {}, out = [];
+    p.forEach(function (q) { var k = q[0] + ',' + q[1]; if (!seen[k]) { seen[k] = 1; out.push(q); } });
+    return out.slice(0, 12);
+  }
+  /** 叉积 (b-a) × (c-a)：>0 左转，<0 右转，=0 共线 */
+  function crossZ(a, b, c) {
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  }
+
+  DSV.register({
+    id: 'geo-convex-hull', name: '凸包（Andrew 单调链）', category: '几何算法',
+    desc: '把点集按 x 升序排列（x 相同按 y），先从左到右构造「下凸链」：每加入新点，若末尾两个点与新点不构成左转（叉积 ≤ 0）就弹出末尾；再从右到左构造「上凸链」，两段拼起来就是凸包。只需排序 + 两次线性扫描，时间 O(n log n)，空间 O(n)。',
+    viewBox: '0 0 1000 640',
+    code: [
+      'convexHull(P):',
+      '  P 按 x 升序排序（x 相同按 y）',
+      '  下链：for p in P（从左到右）:',
+      '    while 末两点与 p 叉积 ≤ 0: 弹出末尾',
+      '    把 p 加入下链',
+      '  上链：for p in P（从右到左）: 同理',
+      '  凸包 = 下链 + 上链（去掉重复端点）'
+    ],
+    inputs: [
+      { key: 'pts', label: '点集（每行 "x y"）', multiline: true,
+        def: '1 1\n4 1\n5 3\n2 4\n0 3\n3 2\n6 2',
+        hint: '每行一个点 "x y"，x 范围 -8~8，y 范围 -6~6，最多 12 个点' }
+    ],
+    samples: [
+      { label: '示例：7 个散点', values: { pts: '1 1\n4 1\n5 3\n2 4\n0 3\n3 2\n6 2' } },
+      { label: '示例：含共线点', values: { pts: '0 0\n2 0\n4 0\n1 2\n3 2\n2 3' } },
+      { label: '示例：凹四边形', values: { pts: '0 0\n5 0\n5 4\n2 1\n0 4' } }
+    ],
+    random: function () {
+      var n = DSV.ri(8, 11), lines = [], i;
+      for (i = 0; i < n; i++) { lines.push(DSV.ri(-6, 6) + ' ' + DSV.ri(-4, 4)); }
+      return { pts: lines.join('\n') };
+    },
+    run: function (v) {
+      var pts = parsePts2(v.pts);
+      if (pts.length < 3) {
+        return [{
+          code: [0],
+          desc: '有效点少于 3 个，无法构造凸包。请在点集输入框里每行填一个 "x y"，至少 3 个点。',
+          snap: { empty: '点太少：至少需要 3 个点' }
+        }];
+      }
+      var st = [];
+      var P = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+      function mkrows(cur, msg) {
+        var r = [
+          { t: '排序后共 ' + P.length + ' 个点', cls: 'done' },
+          { t: '当前处理：P' + cur, cls: 'active' }
+        ];
+        if (msg) { r.push({ t: msg, cls: '' }); }
+        return r;
+      }
+      function snap(o) {
+        o = o || {};
+        return {
+          title: '凸包 Andrew 单调链（共 ' + P.length + ' 个点）',
+          sub: o.sub || '', pts: P.slice(),
+          lower: (o.lower || []).map(function (p) { return p.slice(); }),
+          upper: (o.upper || []).map(function (p) { return p.slice(); }),
+          hull: (o.hull || []).map(function (p) { return p.slice(); }),
+          hlIdx: o.hlIdx == null ? -1 : o.hlIdx,
+          popIdx: o.popIdx == null ? -1 : o.popIdx,
+          rows: o.rows || []
+        };
+      }
+      push(st, [0], '输入点集共 ' + P.length + ' 个点：' + P.map(function (p, k) { return 'P' + k + '(' + f2(p[0]) + ',' + f2(p[1]) + ')'; }).join('，') +
+        '。先把所有点按 x 升序排列（x 相同按 y）', snap({ sub: '第一步：排序', rows: mkrows(-1) }));
+      /* ---- 下链 ---- */
+      var lower = [];
+      for (var i = 0; i < P.length; i++) {
+        while (lower.length >= 2) {
+          var a = lower[lower.length - 2], b = lower[lower.length - 1];
+          var cr = crossZ(a, b, P[i]);
+          if (cr <= 0) {
+            push(st, [3, 4], '加入 P' + i + '(' + f2(P[i][0]) + ',' + f2(P[i][1]) + ') 前检查：末两点 (' +
+              f2(a[0]) + ',' + f2(a[1]) + ') → (' + f2(b[0]) + ',' + f2(b[1]) + ') 与 P' + i + ' 的叉积 = ' +
+              f2(cr) + (cr === 0 ? '（共线）' : '（右转）') + ' ≤ 0，弹出 (' + f2(b[0]) + ',' + f2(b[1]) + ')',
+              snap({ sub: '下链：弹出凹点', lower: lower.slice(0, lower.length - 1), hlIdx: i, popIdx: lower.length - 1,
+                rows: mkrows(i, '叉积 ' + f2(cr) + ' ≤ 0，弹出') }));
+            lower.pop();
+          } else { break; }
+        }
+        lower.push(P[i]);
+        push(st, [4, 5], '把 P' + i + '(' + f2(P[i][0]) + ',' + f2(P[i][1]) + ') 加入下链。当前下链：' +
+          lower.map(function (p) { return '(' + f2(p[0]) + ',' + f2(p[1]) + ')'; }).join(' → '),
+          snap({ sub: '下链构造中', lower: lower.slice(), hlIdx: i, rows: mkrows(i) }));
+      }
+      /* ---- 上链 ---- */
+      var upper = [];
+      for (i = P.length - 1; i >= 0; i--) {
+        while (upper.length >= 2) {
+          var a2 = upper[upper.length - 2], b2 = upper[upper.length - 1];
+          var cr2 = crossZ(a2, b2, P[i]);
+          if (cr2 <= 0) {
+            push(st, [3, 4], '上链加入 P' + i + '(' + f2(P[i][0]) + ',' + f2(P[i][1]) + ') 前检查：叉积 = ' +
+              f2(cr2) + ' ≤ 0，弹出 (' + f2(b2[0]) + ',' + f2(b2[1]) + ')',
+              snap({ sub: '上链：弹出凹点', lower: lower.slice(), upper: upper.slice(0, upper.length - 1), hlIdx: i,
+                rows: mkrows(i, '叉积 ' + f2(cr2) + ' ≤ 0，弹出') }));
+            upper.pop();
+          } else { break; }
+        }
+        upper.push(P[i]);
+        push(st, [4, 5], '把 P' + i + ' 加入上链（从右往左走）。当前上链：' +
+          upper.map(function (p) { return '(' + f2(p[0]) + ',' + f2(p[1]) + ')'; }).join(' → '),
+          snap({ sub: '上链构造中', lower: lower.slice(), upper: upper.slice(), hlIdx: i, rows: mkrows(i) }));
+      }
+      /* ---- 拼接 ---- */
+      var hull = lower.slice(0, lower.length - 1).concat(upper.slice(0, upper.length - 1));
+      push(st, [6], '下链与上链都构造完毕：下链 ' + (lower.length - 1) + ' 段、上链 ' + (upper.length - 1) +
+        ' 段，去掉两条链首尾重复的端点后拼接，得到凸包共 ' + hull.length + ' 个顶点：' +
+        hull.map(function (p) { return '(' + f2(p[0]) + ',' + f2(p[1]) + ')'; }).join(' → '),
+        snap({ sub: '凸包完成', hull: hull, lower: lower.slice(), upper: upper.slice(), rows: [{ t: '凸包 ' + hull.length + ' 个顶点', cls: 'done' }] }));
+      return st;
+    },
+    render: function (kr, s) {
+      kr.html('__defs', S.arrowDefs() + extraDefs());
+      if (!s) { kr.html('__e', S.text(500, 300, '点击「开始演示」构造凸包', 'vs')); kr.end(); return; }
+      if (s.empty) {
+        kr.html('__t', S.text(500, 26, '凸包 Andrew 单调链', 'vt'));
+        kr.html('__w', S.text(500, 300, s.empty, 'vwarn'));
+        kr.end();
+        return;
+      }
+      var V = view2({ cx: 380, cy: 280, sc: 40 });
+      var o = { xmin: -8, xmax: 8, ymin: -6, ymax: 6 };
+      kr.html('__t', S.text(500, 26, s.title, 'vt'));
+      kr.html('__st', S.text(500, 48, s.sub, 'vs'));
+      var g = gridStr(V, o);
+      if (s.hull && s.hull.length >= 3) {
+        var hd = s.hull.map(function (p) { return V.X(p[0]) + ',' + V.Y(p[1]); }).join(' ') + ' ' +
+          V.X(s.hull[0][0]) + ',' + V.Y(s.hull[0][1]);
+        g += S.poly(hd, '', ' style="fill:rgba(255,204,51,.18);stroke:#e6ad10;stroke-width:2.6"');
+      }
+      g += polyStr(V, s.lower, 'fill:none;stroke:#1565a8;stroke-width:2.2');
+      g += polyStr(V, s.upper, 'fill:none;stroke:#8d4fa0;stroke-width:2.2');
+      for (var i = 0; i < s.pts.length; i++) {
+        var p = s.pts[i];
+        var isHull = s.hull && s.hull.some(function (q) { return q[0] === p[0] && q[1] === p[1]; });
+        g += S.circle(V.X(p[0]), V.Y(p[1]), 5, '',
+          ' style="fill:' + (i === s.hlIdx ? '#ffcc33' : (isHull ? '#e6ad10' : '#fff')) + ';stroke:' +
+          (i === s.popIdx ? '#a8402f' : '#006633') + ';stroke-width:2"');
+        g += S.text(V.X(p[0]) + 11, V.Y(p[1]) - 11, 'P' + i, 'tag');
+      }
+      kr.html('__plane', g);
+      kr.html('__panel', panelStr(700, 84, 270, s.rows || [], '构造过程'));
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     七、算法 7：最近点对（分治法）
+     ------------------------------------------------------------ */
+  DSV.register({
+    id: 'geo-closest-pair', name: '最近点对（分治）', category: '几何算法',
+    desc: '在 n 个点中找欧氏距离最近的一对。分治：按 x 坐标从中线切开，左、右两半分别递归求最近对，得到距离 d；再只检查中线两侧宽 d 的带状区域——带内按 y 排序后，每个点只需和它后面最多 7 个点比较（鸽笼原理），即可找到跨两半的更近点。排序 O(n log n)，递归合并每层 O(n)，总时间 O(n log n)。',
+    viewBox: '0 0 1000 640',
+    code: [
+      'closestPair(P, lo, hi):',
+      '  if 点数 ≤ 3: 暴力枚举所有点对',
+      '  mid = (lo+hi)/2；中线 x = P[mid].x',
+      '  dL = 左半递归；dR = 右半递归；d = min(dL,dR)',
+      '  strip = 带内 |x-中线| < d 的点（按 y 排序）',
+      '  for s in strip: 与后面至多 7 个点比较',
+      '    若距离 < d: 更新 d 与最近对',
+      '  return d'
+    ],
+    inputs: [
+      { key: 'pts', label: '点集（每行 "x y"）', multiline: true,
+        def: '1 3\n2 8\n3 1\n5 6\n6 2\n7 9\n8 4\n9 7',
+        hint: '每行一个点 "x y"，x 范围 -8~8，y 范围 -6~6，最多 10 个点' }
+    ],
+    samples: [
+      { label: '示例：8 个散点', values: { pts: '1 3\n2 8\n3 1\n5 6\n6 2\n7 9\n8 4\n9 7' } },
+      { label: '示例：含更近跨线对', values: { pts: '0 0\n1 4\n3 2\n4 6\n6 5\n8 1\n9 3' } },
+      { label: '示例：只有 3 个点', values: { pts: '0 0\n4 0\n1 2' } }
+    ],
+    random: function () {
+      var n = DSV.ri(7, 10), lines = [], i;
+      for (i = 0; i < n; i++) { lines.push(DSV.ri(-7, 7) + ' ' + DSV.ri(-5, 5)); }
+      return { pts: lines.join('\n') };
+    },
+    run: function (v) {
+      var pts = parsePts2(v.pts).slice(0, 10);
+      if (pts.length < 2) {
+        return [{
+          code: [0],
+          desc: '有效点少于 2 个，无法找最近点对。请在点集输入框里每行填一个 "x y"，至少 2 个点。',
+          snap: { empty: '点太少：至少需要 2 个点' }
+        }];
+      }
+      var st = [];
+      var P = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+      var best = { d: Infinity, pair: null };
+      function d2(a, b) { var dx = a[0] - b[0], dy = a[1] - b[1]; return Math.sqrt(dx * dx + dy * dy); }
+      function snap(o) {
+        o = o || {};
+        return {
+          title: '最近点对分治（共 ' + P.length + ' 个点，已按 x 排序）',
+          sub: o.sub || '', pts: P.slice(),
+          region: o.region || null,
+          midX: o.midX == null ? null : o.midX,
+          stripX: o.stripX == null ? null : o.stripX,
+          cmp: o.cmp ? [o.cmp[0].slice(), o.cmp[1].slice()] : null,
+          bestPair: best.pair ? [best.pair[0].slice(), best.pair[1].slice()] : null,
+          bestD: best.d,
+          rows: o.rows || []
+        };
+      }
+      function tryPair(a, b, tag) {
+        var d = d2(a, b);
+        var rows = [{ t: '比较 (' + f2(a[0]) + ',' + f2(a[1]) + ') 与 (' + f2(b[0]) + ',' + f2(b[1]) + ')', cls: 'compare' },
+          { t: '距离 = ' + f2(d) + '，当前最优 = ' + f2(best.d), cls: '' }];
+        if (d < best.d) {
+          best.d = d; best.pair = [a, b];
+          rows.push({ t: '刷新最优！', cls: 'active' });
+          push(st, [5, 6], tag + '比较 (' + f2(a[0]) + ',' + f2(a[1]) + ') 与 (' + f2(b[0]) + ',' + f2(b[1]) + ')：距离 = ' +
+            f2(d) + ' < 当前最优 ' + f2(best.d) + '，刷新最近对',
+            snap({ sub: tag + '找到更近的点对', cmp: [a, b], rows: rows }));
+          return true;
+        }
+        push(st, [5], tag + '比较 (' + f2(a[0]) + ',' + f2(a[1]) + ') 与 (' + f2(b[0]) + ',' + f2(b[1]) + ')：距离 = ' +
+          f2(d) + ' ≥ 当前最优 ' + f2(best.d) + '，不刷新', snap({ sub: tag + '无改进', cmp: [a, b], rows: rows }));
+        return false;
+      }
+      function cp(lo, hi, tag) {
+        var len = hi - lo;
+        if (len <= 3) {
+          push(st, [1], tag + '区间 [P' + lo + '..P' + (hi - 1) + '] 只有 ' + len + ' 个点，直接暴力枚举全部点对',
+            snap({ sub: tag + '小规模：暴力', region: [lo, hi], rows: [{ t: len + ' 个点，暴力枚举', cls: 'active' }] }));
+          for (var i = lo; i < hi; i++) {
+            for (var j = i + 1; j < hi; j++) {
+              tryPair(P[i], P[j], tag);
+            }
+          }
+          return best.d;
+        }
+        var mid = Math.floor((lo + hi) / 2);
+        var midX = P[mid][0];
+        push(st, [2], tag + '区间 [P' + lo + '..P' + (hi - 1) + '] 共 ' + len + ' 个点，在 x = ' + f2(midX) +
+          ' 处切一刀，分成左 [' + lo + '..' + (mid - 1) + '] 与右 [' + mid + '..' + (hi - 1) + '] 两半',
+          snap({ sub: tag + '分治切分', region: [lo, hi], midX: midX, rows: [{ t: '中线 x = ' + f2(midX), cls: 'active' }] }));
+        var dL = cp(lo, mid, tag + ' 左半:');
+        var dR = cp(mid, hi, tag + ' 右半:');
+        var d = Math.min(dL, dR);
+        push(st, [3], tag + '左右两半都算完：左半最优 = ' + f2(dL) + '，右半最优 = ' + f2(dR) +
+          '，取较小者 d = ' + f2(d) + '。接下来只需检查中线附近宽 2d 的带状区域里是否藏着跨两半的更近点对',
+          snap({ sub: tag + '进入带内合并', region: [lo, hi], midX: midX, stripX: d,
+            rows: [{ t: '左半 ' + f2(dL), cls: 'done' }, { t: '右半 ' + f2(dR), cls: 'done' }, { t: 'd = ' + f2(d), cls: 'active' }] }));
+        /* 带状区域：|x - midX| < d，按 y 排序 */
+        var strip = [];
+        for (var k = lo; k < hi; k++) { if (Math.abs(P[k][0] - midX) < d) { strip.push(P[k]); } }
+        strip.sort(function (a, b) { return a[1] - b[1] || a[0] - b[0]; });
+        push(st, [4], tag + '收集带内 |x - ' + f2(midX) + '| < ' + f2(d) + ' 的点共 ' + strip.length +
+          ' 个，并按 y 坐标排序。鸽笼原理保证：每个点只需和后面至多 7 个点比较',
+          snap({ sub: tag + '带状区域', region: [lo, hi], midX: midX, stripX: d,
+            rows: [{ t: '带内 ' + strip.length + ' 个点，按 y 排序', cls: 'active' }] }));
+        for (var a = 0; a < strip.length; a++) {
+          for (var b2 = a + 1; b2 < Math.min(a + 8, strip.length); b2++) {
+            if (Math.abs(strip[b2][1] - strip[a][1]) >= d) { break; }
+            tryPair(strip[a], strip[b2], tag + ' 带内:');
+          }
+        }
+        return best.d;
+      }
+      push(st, [0], '点集共 ' + P.length + ' 个点，先按 x 坐标升序排列。随后分治：一直切到两半各 ≤ 3 个点时暴力枚举，再合并带状区域',
+        snap({ sub: '开始分治', region: [0, P.length], rows: [{ t: '按 x 排序完成', cls: 'done' }] }));
+      cp(0, P.length, '');
+      push(st, [6], '分治结束。全局最近点对：(' + f2(best.pair[0][0]) + ',' + f2(best.pair[0][1]) + ') 与 (' +
+        f2(best.pair[1][0]) + ',' + f2(best.pair[1][1]) + ')，距离 = ' + f2(best.d) +
+        '。每层合并只检查 O(n) 个带内比较，总时间 O(n log n)。',
+        snap({ sub: '最近点对已找到', rows: [{ t: '最近距离 = ' + f2(best.d), cls: 'active' }] }));
+      return st;
+    },
+    render: function (kr, s) {
+      kr.html('__defs', S.arrowDefs() + extraDefs());
+      if (!s) { kr.html('__e', S.text(500, 300, '点击「开始演示」求最近点对', 'vs')); kr.end(); return; }
+      if (s.empty) {
+        kr.html('__t', S.text(500, 26, '最近点对（分治）', 'vt'));
+        kr.html('__w', S.text(500, 300, s.empty, 'vwarn'));
+        kr.end();
+        return;
+      }
+      var V = view2({ cx: 380, cy: 280, sc: 40 });
+      var o = { xmin: -8, xmax: 8, ymin: -6, ymax: 6 };
+      kr.html('__t', S.text(500, 26, s.title, 'vt'));
+      kr.html('__st', S.text(500, 48, s.sub, 'vs'));
+      var g = gridStr(V, o);
+      /* 当前递归区间：底部画一条粗线 */
+      if (s.region) {
+        var x0 = V.X(s.pts[s.region[0]][0]), x1 = V.X(s.pts[s.region[1] - 1][0]);
+        g += S.line(x0, V.Y(-5.4), x1, V.Y(-5.4), 'edge', ' style="stroke:#1565a8;stroke-width:4"');
+      }
+      /* 中线 */
+      if (s.midX != null) {
+        g += S.line(V.X(s.midX), V.Y(-5.6), V.X(s.midX), V.Y(5.6), 'edge', ' style="stroke:#a8402f;stroke-width:1.6;stroke-dasharray:6 4"');
+      }
+      /* 带状区域 */
+      if (s.midX != null && s.stripX != null && isFinite(s.stripX)) {
+        g += S.rect(V.X(s.midX - s.stripX), V.Y(5.6), (V.X(s.midX + s.stripX) - V.X(s.midX - s.stripX)),
+          (V.Y(-5.6) - V.Y(5.6)), '', ' style="fill:rgba(168,64,47,.08);stroke:none"');
+      }
+      for (var i = 0; i < s.pts.length; i++) {
+        var p = s.pts[i];
+        g += S.circle(V.X(p[0]), V.Y(p[1]), 5, '', ' style="fill:#fff;stroke:#006633;stroke-width:2"');
+        g += S.text(V.X(p[0]) + 10, V.Y(p[1]) - 10, 'P' + i, 'tag');
+      }
+      if (s.cmp) {
+        g += S.line(V.X(s.cmp[0][0]), V.Y(s.cmp[0][1]), V.X(s.cmp[1][0]), V.Y(s.cmp[1][1]), '',
+          ' style="stroke:#a8402f;stroke-width:2.4"');
+      }
+      if (s.bestPair) {
+        g += S.line(V.X(s.bestPair[0][0]), V.Y(s.bestPair[0][1]), V.X(s.bestPair[1][0]), V.Y(s.bestPair[1][1]), '',
+          ' style="stroke:#e6ad10;stroke-width:3"');
+      }
+      kr.html('__plane', g);
+      kr.html('__panel', panelStr(700, 84, 270, s.rows || [], '当前状态'));
+      kr.html('__bd', S.text(500, 560, '当前全局最优距离 = ' + (isFinite(s.bestD) ? f2(s.bestD) : '∞') +
+        '　·　红虚线=分治中线，红色矩形=比较带状区域，金线=当前最优对', 'vs'));
+      kr.end();
+    }
+  });
+
 })();

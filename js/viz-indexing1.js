@@ -1234,4 +1234,1002 @@
     }
   });
 
+  /* ============================================================
+     7. 折半查找（二分查找）
+     ============================================================ */
+  DSV.register({
+    id: 'idx-binary', name: '折半查找（二分查找）', category: '索引结构',
+    desc: '在有序数组上每次取中间元素与目标比较：相等即命中；目标更小舍去右半段，更大舍去左半段，把范围每次缩小一半。时间 O(log n)，空间 O(1)，是有序顺序表的标准查找算法。',
+    code: [
+      'binarySearch(a, x):',
+      '  lo = 0; hi = a.length - 1',
+      '  while lo <= hi:',
+      '    mid = floor((lo + hi) / 2)',
+      '    if a[mid] == x: return mid         // 命中',
+      '    else if a[mid] < x: lo = mid + 1   // 目标在右半段',
+      '    else: hi = mid - 1                  // 目标在左半段',
+      '  return -1                             // 区间空，未找到'
+    ],
+    viewBox: '0 0 1000 460',
+    inputs: [
+      { key: 'arr', label: '有序数组', def: '3,12,24,35,47,58,69,88,99', hint: '必须升序，逗号分隔' },
+      { key: 'target', label: '目标值', def: '47', hint: '整数' }
+    ],
+    actions: [{ key: 'search', label: '开始查找', primary: true }],
+    samples: [
+      { label: '示例：命中中间偏右', values: { arr: '3,12,24,35,47,58,69,88,99', target: '47' } },
+      { label: '示例：查找失败', values: { arr: '3,12,24,35,47,58,69,88,99', target: '50' } }
+    ],
+    random: function () {
+      var n = DSV.ri(7, 10), a = [], cur = DSV.ri(1, 9);
+      for (var i = 0; i < n; i++) { cur += DSV.ri(3, 12); a.push(cur); }
+      var t = Math.random() < 0.6 ? a[DSV.ri(0, a.length - 1)] : cur + DSV.ri(5, 20);
+      return { arr: a.join(','), target: String(t) };
+    },
+    run: function (v) {
+      var a = DSV.nums(v.arr, 12), x = parseInt(v.target, 10), steps = [];
+      if (!a.length || !isFinite(x)) {
+        return [{ code: [1], desc: '输入无效：请先填写一个升序数组（如 3,12,24,35）与整数目标值。',
+          snap: { empty: true, msg: '请输入非空升序数组与目标值' } }];
+      }
+      var n = a.length, lo = 0, hi = n - 1, mid = -1, found = -1;
+      function mkCls() {
+        var c = [];
+        for (var i = 0; i < n; i++) {
+          if (found >= 0 && i === found) { c.push('done'); }
+          else if (i < lo || i > hi) { c.push('dead'); }
+          else if (i === mid) { c.push('compare'); }
+          else { c.push(''); }
+        }
+        return c;
+      }
+      function snap(o) {
+        o = o || {};
+        return { arr: a.slice(), n: n, lo: lo, hi: hi, mid: mid, found: found, cls: mkCls(), msg: o.msg || '' };
+      }
+      push(steps, [1, 2], '初始：lo = 0（左端），hi = ' + (n - 1) + '（右端），在整个数组 [' + a.join(', ') + '] 中查找目标 ' + x + '。',
+        snap({ msg: '查找范围：全部 ' + n + ' 个元素' }));
+      var guard = 0;
+      while (lo <= hi && guard++ < 40) {
+        mid = Math.floor((lo + hi) / 2);
+        push(steps, [3, 4], '取中点 mid = (' + lo + '+' + hi + ')/2 = ' + mid + '，比较 a[' + mid + '] = ' + a[mid] + ' 与目标 ' + x + '。',
+          snap({ msg: '比较 a[' + mid + ']=' + a[mid] + ' 与 ' + x }));
+        if (a[mid] === x) {
+          found = mid;
+          push(steps, [5], 'a[' + mid + '] = ' + a[mid] + ' == 目标 ' + x + '：命中！共经过 ' + guard + ' 次比较，长度 ' + n + ' 的表只需 O(log₂' + n + ') 次左右。',
+            snap({ msg: '查找成功：a[' + found + '] = ' + x }));
+          break;
+        } else if (a[mid] < x) {
+          push(steps, [6], 'a[' + mid + '] = ' + a[mid] + ' < ' + x + '：目标在右半段，舍去左半段，令 lo = mid + 1 = ' + (mid + 1) + '。',
+            snap({ msg: 'lo ← ' + (mid + 1) }));
+          lo = mid + 1;
+        } else {
+          push(steps, [7], 'a[' + mid + '] = ' + a[mid] + ' > ' + x + '：目标在左半段，舍去右半段，令 hi = mid - 1 = ' + (mid - 1) + '。',
+            snap({ msg: 'hi ← ' + (mid - 1) }));
+          hi = mid - 1;
+        }
+      }
+      if (found < 0) {
+        mid = -1;
+        push(steps, [8], 'lo = ' + lo + ' > hi = ' + hi + '：查找区间为空，数组中不存在 ' + x + '，查找失败。',
+          snap({ msg: '数组中不存在 ' + x }));
+      }
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || s.empty) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || '折半查找：输入升序数组与目标值后点击「开始查找」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 30, '折半查找（二分查找）', 'vt'));
+      kr.html('__s', S.text(500, 56, s.msg || '', 'vs'));
+      var n = s.n, cw = Math.min(64, Math.floor((1000 - 160) / n)), gap = 10;
+      var total = n * cw + (n - 1) * gap, x0 = (1000 - total) / 2, y = 230;
+      function cx(i) { return x0 + i * (cw + gap) + cw / 2; }
+      for (var i = 0; i < n; i++) {
+        kr.g('c' + i, 'translate(' + cx(i) + ',' + y + ')', 'k',
+          '<rect class="cell ' + (s.cls[i] || '') + '" x="' + (-cw / 2) + '" y="-26" width="' + cw + '" height="52" rx="4"/>' +
+          S.text(0, 0, s.arr[i], 'cell-txt') + S.text(0, 44, i, 'idx-txt'));
+      }
+      var marks = [[s.lo, 'lo', false], [s.mid, 'mid', true], [s.hi, 'hi', false]];
+      for (var m = 0; m < marks.length; m++) {
+        var mi = marks[m][0];
+        if (mi < 0 || mi >= n) { continue; }
+        kr.g('p_' + marks[m][1], 'translate(' + cx(mi) + ',' + (y - 56 - m * 24) + ')', 'k',
+          S.text(0, 0, '▼ ' + marks[m][1], 'ptr' + (marks[m][2] ? ' ptr-t' : '')));
+      }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     8. 二叉树遍历（前 / 中 / 后 / 层序，非递归栈与队列模拟）
+     ============================================================ */
+  /** 按 BST 规则把 x 静默插入树中（不产生步骤），返回新结点 */
+  function toInsert(st, x) {
+    if (!st.root) { st.root = mkNode(x, st); return st.root; }
+    var p = st.root;
+    while (true) {
+      if (x < p.v) { if (!p.left) { p.left = mkNode(x, st); return p.left; } p = p.left; }
+      else if (x > p.v) { if (!p.right) { p.right = mkNode(x, st); return p.right; } p = p.right; }
+      else { return p; }
+    }
+  }
+  /** 遍历快照：root 克隆 + 结点高亮 + 栈/队列/输出内容 */
+  function toSnap(st, o) {
+    o = o || {};
+    return {
+      root: DSV.clone(st.root),
+      hl: o.hl || {},
+      stack: (o.stack || []).slice(),
+      queue: (o.queue || []).slice(),
+      out: (o.out || []).slice(),
+      mode: o.mode || 'pre',
+      msg: o.msg || ''
+    };
+  }
+  /** 已访问结点 done，当前结点 active */
+  function hlVisited(outIds, curId) {
+    var h = {};
+    for (var k = 0; k < outIds.length; k++) { h[outIds[k]] = 'done'; }
+    if (curId) { h[curId] = 'active'; }
+    return h;
+  }
+
+  DSV.register({
+    id: 'idx-tree-order', name: '二叉树遍历（前/中/后/层序）', category: '索引结构',
+    desc: '用显式栈/队列模拟四种遍历：前序根左右、中序左根右、后序左右根用栈，层序用队列，避免递归。每种遍历都访问 n 个结点，时间 O(n)，栈/队列最坏 O(n)；BST 的中序即升序序列。',
+    code: [
+      '// 前序（非递归）：栈里先压右孩子再压左孩子',
+      'preOrder(root):',
+      '  if root == null: return',
+      '  stack = [root]',
+      '  while stack 非空:',
+      '    n = 栈.pop();  访问 n',
+      '    if n.right: 栈.push(n.right)',
+      '    if n.left:  栈.push(n.left)',
+      '',
+      '// 中序：一路向左入栈，弹出访问后转向右子树',
+      'inOrder(root):',
+      '  cur = root; stack = []',
+      '  while cur 或 stack 非空:',
+      '    while cur: 栈.push(cur); cur = cur.left',
+      '    cur = 栈.pop(); 访问 cur; cur = cur.right',
+      '',
+      '// 层序：队列先进先出，一层一层扩展',
+      'levelOrder(root):',
+      '  队列 = [root]',
+      '  while 队列 非空:',
+      '    n = 队列.shift(); 访问 n',
+      '    if n.left: 队列.push(n.left)',
+      '    if n.right: 队列.push(n.right)'
+    ],
+    inputs: [{ key: 'init', label: '建树序列', def: '50,30,70,20,40,60,80', hint: '按 BST 规则建树，逗号分隔' }],
+    actions: [
+      { key: 'pre', label: '前序遍历', primary: true },
+      { key: 'in', label: '中序遍历' },
+      { key: 'post', label: '后序遍历' },
+      { key: 'level', label: '层序遍历' }
+    ],
+    samples: [
+      { label: '示例：满二叉树', values: { init: '50,30,70,20,40,60,80' } },
+      { label: '示例：左斜树', values: { init: '5,4,3,2,1' } }
+    ],
+    random: function () { return { init: DSV.shuffle(DSV.randArr(DSV.ri(6, 8), 10, 99)).join(',') }; },
+    run: function (v, action, state) {
+      var st = state || { root: null, next: 1 };
+      var steps = [];
+      var key = (action && action.key) || 'pre';
+      var i;
+      /* 首次运行（state 为空）时先按输入建树 */
+      if (!st.root) {
+        var a = DSV.nums(v.init, 12);
+        push(steps, [1], '建树：按输入序列依次插入 ' + (a.length ? a.join(' → ') : '（空）') + ' 个结点（BST 规则）。',
+          toSnap(st, { mode: key, msg: '初始化空树' }));
+        for (i = 0; i < a.length; i++) { toInsert(st, a[i]); }
+        if (!st.root) {
+          push(steps, [1], '输入序列为空，得到一棵空树，无法遍历。', toSnap(st, { mode: key, msg: '请在输入框中填写结点序列' }));
+          return { steps: steps, state: st };
+        }
+        push(steps, [1], '建树完成，下面用显式栈 / 队列进行非递归遍历。', toSnap(st, { mode: key, msg: '树已就绪' }));
+      }
+
+      /* ---------- 前序 ---------- */
+      if (key === 'pre') {
+        var stack = [st.root], outIds = [], outVals = [];
+        push(steps, [3, 4], '前序开始：根 ' + st.root.v + ' 入栈（栈底在左，栈顶在右）。',
+          toSnap(st, { stack: [st.root.v], mode: 'pre', msg: '栈初始化' }));
+        var g1 = 0;
+        while (stack.length && g1++ < 100) {
+          var n = stack.pop();
+          outIds.push(n.id); outVals.push(n.v);
+          push(steps, [5, 6], '弹出栈顶结点 ' + n.v + ' → 访问（前序：根最先访问），当前输出序列：' + outVals.join(' ') + '。',
+            toSnap(st, { hl: hlVisited(outIds, n.id), stack: stack.map(function (x) { return x.v; }), out: outVals, mode: 'pre', msg: '访问 ' + n.v }));
+          var pushed = [];
+          if (n.right) { stack.push(n.right); pushed.push(n.right.v); }
+          if (n.left) { stack.push(n.left); pushed.push(n.left.v); }
+          if (pushed.length) {
+            push(steps, [7, 8], n.v + ' 的孩子入栈：先压右孩子 ' + (n.right ? n.right.v : '无') + '，再压左孩子 ' + (n.left ? n.left.v : '无') + '（这样弹出时左先右后，正好符合根→左→右）。',
+              toSnap(st, { hl: hlVisited(outIds, n.id), stack: stack.map(function (x) { return x.v; }), out: outVals, mode: 'pre', msg: '孩子入栈' }));
+          }
+        }
+        push(steps, [5], '前序遍历完成，输出序列：' + outVals.join(' ') + '（根 → 左子树 → 右子树）。',
+          toSnap(st, { hl: hlVisited(outIds), stack: [], out: outVals, mode: 'pre', msg: '前序：' + outVals.join(' ') }));
+      }
+
+      /* ---------- 中序 ---------- */
+      if (key === 'in') {
+        var cur = st.root, stk = [], inIds = [], inVals = [];
+        push(steps, [10, 11], '中序开始：cur 指向根 ' + st.root.v + '，栈为空。',
+          toSnap(st, { mode: 'in', stack: [], msg: '初始化' }));
+        var g2 = 0;
+        while ((cur || stk.length) && g2++ < 100) {
+          while (cur) {
+            stk.push(cur);
+            push(steps, [13], 'cur = ' + cur.v + ' 不为空：压入栈并向左走（先把整棵左子树依次入栈）。',
+              toSnap(st, { hl: hlVisited(inIds, cur.id), stack: stk.map(function (x) { return x.v; }), out: inVals, mode: 'in', msg: cur.v + ' 入栈' }));
+            cur = cur.left;
+          }
+          if (!stk.length) { break; }
+          cur = stk.pop();
+          inIds.push(cur.id); inVals.push(cur.v);
+          push(steps, [14], '栈顶弹出 ' + cur.v + ' → 访问（中序：左子树走完后才访问根），输出：' + inVals.join(' ') + '。',
+            toSnap(st, { hl: hlVisited(inIds, cur.id), stack: stk.map(function (x) { return x.v; }), out: inVals, mode: 'in', msg: '访问 ' + cur.v }));
+          cur = cur.right;
+        }
+        push(steps, [14], '中序遍历完成，输出序列：' + inVals.join(' ') + '（左子树 → 根 → 右子树；BST 的中序即升序）。',
+          toSnap(st, { hl: hlVisited(inIds), stack: [], out: inVals, mode: 'in', msg: '中序：' + inVals.join(' ') }));
+      }
+
+      /* ---------- 后序（带已处理标记的栈） ---------- */
+      if (key === 'post') {
+        var sp = [{ n: st.root, done: false }], postIds = [], postVals = [];
+        push(steps, [1], '后序开始：把（根 ' + st.root.v + '，未处理标记 false）压入栈。',
+          toSnap(st, { mode: 'post', stack: [{ v: st.root.v, done: false }], msg: '栈初始化' }));
+        var g3 = 0;
+        while (sp.length && g3++ < 150) {
+          var it = sp.pop();
+          if (it.done) {
+            postIds.push(it.n.id); postVals.push(it.n.v);
+            push(steps, [6], '弹出标记为「已处理」的 ' + it.n.v + ' → 真正访问（后序：左右子树都走完才访问根），输出：' + postVals.join(' ') + '。',
+              toSnap(st, { hl: hlVisited(postIds, it.n.id), stack: sp.map(function (x) { return { v: x.n.v, done: x.done }; }), out: postVals, mode: 'post', msg: '访问 ' + it.n.v }));
+          } else {
+            sp.push({ n: it.n, done: true });
+            if (it.n.right) { sp.push({ n: it.n.right, done: false }); }
+            if (it.n.left) { sp.push({ n: it.n.left, done: false }); }
+            push(steps, [6, 7], '弹出（' + it.n.v + ', false）：它还没处理过。按「根最后访问」的要求，把它改成 true 标记重新压栈，再依次压右、左孩子。',
+              toSnap(st, { hl: hlVisited(postIds, it.n.id), stack: sp.map(function (x) { return { v: x.n.v, done: x.done }; }), out: postVals, mode: 'post', msg: it.n.v + ' 标记置 true 后重入栈' }));
+          }
+        }
+        push(steps, [6], '后序遍历完成，输出序列：' + postVals.join(' ') + '（左子树 → 右子树 → 根）。',
+          toSnap(st, { hl: hlVisited(postIds), stack: [], out: postVals, mode: 'post', msg: '后序：' + postVals.join(' ') }));
+      }
+
+      /* ---------- 层序 ---------- */
+      if (key === 'level') {
+        var q = [st.root], lvlIds = [], lvlVals = [];
+        push(steps, [17, 18], '层序开始：根 ' + st.root.v + ' 入队。',
+          toSnap(st, { mode: 'level', queue: [st.root.v], msg: '队列初始化' }));
+        var g4 = 0;
+        while (q.length && g4++ < 100) {
+          var qn = q.shift();
+          lvlIds.push(qn.id); lvlVals.push(qn.v);
+          push(steps, [19, 20], '队首出队 ' + qn.v + ' → 访问（一层一层从左到右），输出：' + lvlVals.join(' ') + '。',
+            toSnap(st, { hl: hlVisited(lvlIds, qn.id), queue: q.map(function (x) { return x.v; }), out: lvlVals, mode: 'level', msg: '访问 ' + qn.v }));
+          if (qn.left) { q.push(qn.left); }
+          if (qn.right) { q.push(qn.right); }
+          if (qn.left || qn.right) {
+            push(steps, [21, 22], qn.v + ' 的左孩子 ' + (qn.left ? qn.left.v : '无') + '、右孩子 ' + (qn.right ? qn.right.v : '无') + ' 依次入队尾。',
+              toSnap(st, { hl: hlVisited(lvlIds, qn.id), queue: q.map(function (x) { return x.v; }), out: lvlVals, mode: 'level', msg: '孩子入队' }));
+          }
+        }
+        push(steps, [19], '层序遍历完成，输出序列：' + lvlVals.join(' ') + '（按层从上到下、同层从左到右）。',
+          toSnap(st, { hl: hlVisited(lvlIds), queue: [], out: lvlVals, mode: 'level', msg: '层序：' + lvlVals.join(' ') }));
+      }
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s || !s.root) {
+        kr.html('__e', S.text(500, 280, '二叉树遍历：先输入建树序列，再点击前/中/后/层序按钮。', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '二叉树非递归遍历', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      DSV.drawTree(kr, s.root, {
+        top: 86, dy: 62,
+        node: function (n) { return { inner: S.circle(0, 0, 22) + S.text(0, 0, n.v), cls: s.hl[n.id] || '' }; }
+      });
+      function row(key, y, label, items) {
+        if (!items || !items.length) { kr.html(key + '_l', S.textL(120, y, label, 'vs')); return; }
+        var cw = 46, gap = 8, m = items.length;
+        var total = m * cw + (m - 1) * gap, x0 = (1000 - total) / 2;
+        kr.html(key + '_l', S.textL(120, y, label, 'vs'));
+        for (var i = 0; i < m; i++) {
+          var it = items[i];
+          var isObj = (typeof it === 'object' && it !== null);
+          var v = isObj ? it.v : it;
+          var mark = (isObj && it.done) ? ' ✓' : '';
+          kr.g(key + '_' + i, 'translate(' + (x0 + i * (cw + gap) + cw / 2) + ',' + y + ')', 'k',
+            '<rect class="cell" x="' + (-cw / 2) + '" y="-16" width="' + cw + '" height="32" rx="4"/>' +
+            S.text(0, 0, v + mark, 'cell-txt'));
+        }
+      }
+      if (s.mode === 'level') { row('q', 440, '队列（队首→左）', s.queue); }
+      else { row('stk', 440, '栈（栈顶→右）', s.stack); }
+      row('out', 486, '输出序列', s.out);
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     9. 分块查找（索引顺序查找）
+     ============================================================ */
+  DSV.register({
+    id: 'idx-block-search', name: '分块查找（索引顺序查找）', category: '索引结构',
+    desc: '把有序表按块划分，另建一张「块最大关键码」索引表：先查索引表确定目标所在块，再在块内顺序查找。块间有序、块内可不完全有序，是顺序查找与折半查找的折中，平均性能约 O(√n)。',
+    code: [
+      '// 索引表每一项记录对应块的最大关键码与起止下标',
+      'blockSearch(a, idx, x):',
+      '  // 第一步：查索引表，确定 x 落在哪一块',
+      '  b = 0',
+      '  while b < idx.length and idx[b].max < x: b++',
+      '  if b == idx.length: return -1          // 超过最后一块',
+      '  // 第二步：在第 b 块内部顺序查找',
+      '  i = idx[b].lo; j = idx[b].hi',
+      '  while i <= j:',
+      '    if a[i] == x: return i               // 命中',
+      '    i++',
+      '  return -1'
+    ],
+    inputs: [
+      { key: 'arr', label: '有序表', def: '10,20,30,40,50,60,70,80,90,100,110,120', hint: '建议升序，逗号分隔' },
+      { key: 'target', label: '目标值', def: '70', hint: '整数' }
+    ],
+    actions: [{ key: 'run', label: '开始查找', primary: true }],
+    samples: [
+      { label: '示例：命中第 2 块', values: { arr: '10,20,30,40,50,60,70,80,90,100,110,120', target: '70' } },
+      { label: '示例：块内查找失败', values: { arr: '10,20,30,40,50,60,70,80,90,100,110,120', target: '85' } }
+    ],
+    random: function () {
+      var nb = DSV.ri(2, 3), bs = DSV.ri(3, 4), a = [], cur = DSV.ri(5, 15);
+      for (var i = 0; i < nb * bs; i++) { cur += DSV.ri(5, 15); a.push(cur); }
+      var t = Math.random() < 0.6 ? a[DSV.ri(0, a.length - 1)] : cur + DSV.ri(5, 30);
+      return { arr: a.join(','), target: String(t) };
+    },
+    run: function (v) {
+      var a = DSV.nums(v.arr, 18), x = parseInt(v.target, 10), steps = [];
+      if (!a.length || !isFinite(x)) {
+        return [{ code: [1], desc: '输入无效：请填写非空有序表与整数目标值。',
+          snap: { empty: true, msg: '请输入有序表（逗号分隔）与目标值' } }];
+      }
+      var n = a.length, bs = 4, nb = Math.ceil(n / bs), idx = [], b, i;
+      for (b = 0; b < nb; b++) {
+        var lo = b * bs, hi = Math.min(n - 1, (b + 1) * bs - 1), mx = a[lo];
+        for (i = lo; i <= hi; i++) { if (a[i] > mx) { mx = a[i]; } }
+        idx.push({ lo: lo, hi: hi, max: mx });
+      }
+      var blockIdx = -1, scanI = -1, found = -1;
+      function mkCls() {
+        var c = [], k;
+        for (k = 0; k < n; k++) {
+          c[k] = '';
+          if (blockIdx >= 0 && blockIdx < nb && k >= idx[blockIdx].lo && k <= idx[blockIdx].hi) { c[k] = 'path'; }
+          if (k === scanI && scanI >= 0) { c[k] = 'compare'; }
+          if (found >= 0 && k === found) { c[k] = 'done'; }
+        }
+        return c;
+      }
+      function snap(o) {
+        o = o || {};
+        return { arr: a.slice(), n: n, idx: DSV.clone(idx), target: x, blockIdx: blockIdx, scanI: scanI, found: found, cls: mkCls(), msg: o.msg || '' };
+      }
+      var idxTxt = '';
+      for (b = 0; b < nb; b++) { idxTxt += (b ? '，' : '') + '块' + b + '≤' + idx[b].max; }
+      push(steps, [1, 2], '把长 ' + n + ' 的有序表按每块 ' + bs + ' 个元素划成 ' + nb + ' 块，建立索引表（每块记录块内最大值与起止下标）：' + idxTxt + '。',
+        snap({ msg: '索引表：' + idxTxt }));
+      /* 第一步：查索引表 */
+      for (b = 0; b < nb; b++) {
+        blockIdx = b;
+        if (x > idx[b].max) {
+          push(steps, [4, 5], '比较目标 ' + x + ' 与索引项「块' + b + ' 最大 = ' + idx[b].max + '」：' + x + ' > ' + idx[b].max + '，本块不可能包含目标，跳到下一块。',
+            snap({ msg: x + ' > ' + idx[b].max + '，跳过块' + b }));
+        } else {
+          push(steps, [5], '比较目标 ' + x + ' 与索引项「块' + b + ' 最大 = ' + idx[b].max + '」：' + x + ' ≤ ' + idx[b].max + '，目标若存在必在第 ' + b + ' 块（下标 ' + idx[b].lo + '…' + idx[b].hi + '）。',
+            snap({ msg: '进入块' + b + '（下标 ' + idx[b].lo + '…' + idx[b].hi + '）' }));
+          break;
+        }
+      }
+      /* 第二步：块内顺序查找 */
+      if (blockIdx < nb && x <= idx[blockIdx].max) {
+        var L = idx[blockIdx].lo, R = idx[blockIdx].hi;
+        for (i = L; i <= R; i++) {
+          scanI = i;
+          if (a[i] === x) {
+            found = i;
+            push(steps, [8, 9], '块内顺序比较：a[' + i + '] = ' + a[i] + ' == 目标 ' + x + ' → 命中！共查了索引表 ' + (blockIdx + 1) + ' 项、块内 ' + (i - L + 1) + ' 个元素。',
+              snap({ msg: '查找成功：a[' + found + '] = ' + x }));
+            break;
+          } else {
+            push(steps, [9], '块内顺序比较：a[' + i + '] = ' + a[i] + ' ≠ ' + x + '，继续同块下一个。',
+              snap({ msg: 'a[' + i + ']=' + a[i] + ' ≠ ' + x }));
+          }
+        }
+        if (found < 0) {
+          scanI = -1;
+          push(steps, [10], '第 ' + blockIdx + ' 块内 [' + a.slice(L, R + 1).join(', ') + '] 都比较完仍不等于 ' + x + '：按分块查找约定，目标不存在。',
+            snap({ msg: '块内无 ' + x }));
+        }
+      } else {
+        blockIdx = nb;
+        push(steps, [5], '目标 ' + x + ' 比所有块的最大值都大（最大块值 = ' + idx[nb - 1].max + '），不可能存在于表中。',
+          snap({ msg: '目标超出最后一块范围' }));
+      }
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || s.empty) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || '分块查找：输入有序表与目标值后点击「开始查找」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '分块查找（索引顺序查找）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      var nb = s.idx.length, i;
+      var bw = 150, bg = 20, btot = nb * bw + (nb - 1) * bg, bx0 = (1000 - btot) / 2;
+      kr.html('__il', S.textL(60, 120, '索引表', 'vs'));
+      for (i = 0; i < nb; i++) {
+        var e = s.idx[i];
+        var active = (i === s.blockIdx) ? ' active' : '';
+        kr.g('ib' + i, 'translate(' + (bx0 + i * (bw + bg) + bw / 2) + ',120)', 'k',
+          '<rect class="cell' + active + '" x="' + (-bw / 2) + '" y="-18" width="' + bw + '" height="36" rx="4"/>' +
+          S.text(0, -5, '块' + i + ' ≤ ' + e.max, 'cell-txt') + S.text(0, 12, '下标 ' + e.lo + '…' + e.hi, 'idx-txt'));
+      }
+      var n = s.n, cw = Math.min(56, Math.floor((1000 - 120) / n)), gap = 8;
+      var tot = n * cw + (n - 1) * gap, x0 = (1000 - tot) / 2, y = 270;
+      for (i = 0; i < n; i++) {
+        kr.g('d' + i, 'translate(' + (x0 + i * (cw + gap) + cw / 2) + ',' + y + ')', 'k',
+          '<rect class="cell ' + (s.cls[i] || '') + '" x="' + (-cw / 2) + '" y="-24" width="' + cw + '" height="48" rx="4"/>' +
+          S.text(0, 0, s.arr[i], 'cell-txt') + S.text(0, 40, i, 'idx-txt'));
+      }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     10. 线索二叉树（中序线索化 + 按线索遍历）
+     ============================================================ */
+  /** 线索树快照：扁平结点表（线索是跨结点引用，直接克隆会成环，故只存 id） */
+  function thSnap(st, o, msg) {
+    o = o || {};
+    var nodes = [];
+    thWalk(st.root, function (n) {
+      nodes.push({
+        id: n.id, v: n.v,
+        ltag: n.ltag || 0, rtag: n.rtag || 0,
+        leftId: n.left ? n.left.id : null,
+        rightId: n.right ? n.right.id : null
+      });
+    });
+    return { nodes: nodes, hl: o.hl || {}, msg: msg || '' };
+  }
+  /** 沿真孩子遍历（线索化后 left/right 可能是线索，不能盲走） */
+  function thWalk(n, fn) {
+    if (!n) { return; }
+    fn(n);
+    thWalk(n.ltag === 1 ? null : n.left, fn);
+    thWalk(n.rtag === 1 ? null : n.right, fn);
+  }
+
+  DSV.register({
+    id: 'idx-threaded', name: '线索二叉树', category: '索引结构',
+    desc: '把二叉树中的空左/右指针改作线索：左空指针指中序前驱、右空指针指中序后继，遍历就不再需要栈或递归。线索化一次性 O(n)，之后沿右线索逐个访问仍是 O(n)，空间上省去栈。',
+    code: [
+      '// 中序线索化：ltag=1 表示左指针是前驱线索',
+      'thread(root):',
+      '  seq = 中序遍历得到的结点序列',
+      '  for i = 0 to seq.length-1:',
+      '    if seq[i].left == null:',
+      '      seq[i].ltag = 1;  seq[i].left = seq[i-1]   // 前驱',
+      '    if seq[i].right == null:',
+      '      seq[i].rtag = 1;  seq[i].right = seq[i+1]  // 后继',
+      '',
+      '// 按中序线索遍历（不写栈）',
+      'walk(root):',
+      '  p = root; while p.ltag == 0: p = p.left       // 走到最左下',
+      '  while p != null:',
+      '    访问 p',
+      '    if p.rtag == 1: p = p.right                 // 右线索 → 直接跳后继',
+      '    else: p = 右子树中的最左下结点'
+    ],
+    inputs: [{ key: 'init', label: '建树序列', def: '50,30,70,20,40,60,80', hint: 'BST 规则建树，逗号分隔' }],
+    actions: [
+      { key: 'build', label: '建树并线索化', primary: true },
+      { key: 'walk', label: '按线索中序遍历' }
+    ],
+    samples: [
+      { label: '示例：满二叉树', values: { init: '50,30,70,20,40,60,80' } },
+      { label: '示例：单链', values: { init: '50,40,30,20' } }
+    ],
+    random: function () { return { init: DSV.shuffle(DSV.randArr(DSV.ri(5, 7), 10, 99)).join(',') }; },
+    run: function (v, action, state) {
+      var st = state || { root: null, next: 1, threaded: false };
+      var steps = [];
+      var key = (action && action.key) || 'build';
+      var i;
+      if (!st.root) {
+        var a = DSV.nums(v.init, 12);
+        push(steps, [1], '建树：按输入序列 ' + (a.length ? a.join(' → ') : '（空）') + ' 建立二叉搜索树。',
+          thSnap(st, {}, '初始化'));
+        for (i = 0; i < a.length; i++) { toInsert(st, a[i]); }
+        if (!st.root) {
+          push(steps, [1], '输入为空，空树无法线索化。', thSnap(st, {}, '请填写结点序列'));
+          return { steps: steps, state: st };
+        }
+        push(steps, [1], '树建好，共 ' + (st.next - 1) + ' 个结点。空指针既浪费又能省去遍历用的栈，下面做中序线索化。',
+          thSnap(st, {}, '建树完成，准备线索化'));
+      }
+      if (key === 'build') {
+        if (!st.threaded) {
+          var seq = [];
+          (function inw(n) { if (!n) { return; } inw(n.left); seq.push(n); inw(n.right); })(st.root);
+          var seqTxt = '';
+          for (i = 0; i < seq.length; i++) { seqTxt += (i ? ' → ' : '') + seq[i].v; }
+          push(steps, [1, 2], '先做一次中序遍历，得到序列：' + seqTxt + '。线索化就是给每个空指针配上它在这条序列里的前驱/后继。',
+            thSnap(st, {}, '中序序列：' + seqTxt));
+          for (i = 0; i < seq.length; i++) {
+            var n = seq[i], pred = i > 0 ? seq[i - 1] : null, succ = i < seq.length - 1 ? seq[i + 1] : null;
+            if (!n.left) {
+              n.ltag = 1; n.left = pred;
+              (function (nn, pr) {
+                var h = {}; h[nn.id] = 'active'; if (pr) { h[pr.id] = 'compare'; }
+                push(steps, [3, 4], '结点 ' + nn.v + ' 的左孩子为空：令左线索（ltag=1）指向前驱 ' + (pr ? pr.v : 'null（序列头）') + '。',
+                  thSnap(st, { hl: h }, nn.v + ' 的左空指针 → 前驱' + (pr ? ' ' + pr.v : ' null')));
+              })(n, pred);
+            }
+            if (!n.right) {
+              n.rtag = 1; n.right = succ;
+              (function (nn, sc) {
+                var h = {}; h[nn.id] = 'active'; if (sc) { h[sc.id] = 'compare'; }
+                push(steps, [5, 6], '结点 ' + nn.v + ' 的右孩子为空：令右线索（rtag=1）指向后继 ' + (sc ? sc.v : 'null（序列尾）') + '。',
+                  thSnap(st, { hl: h }, nn.v + ' 的右空指针 → 后继' + (sc ? ' ' + sc.v : ' null')));
+              })(n, succ);
+            }
+          }
+          st.threaded = true;
+          push(steps, [1], '线索化完成：图中虚线即为线索（左虚线=前驱，右虚线=后继）。接下来可以点「按线索中序遍历」，全程不写栈。',
+            thSnap(st, {}, '虚线 = 线索，准备遍历'));
+        } else {
+          push(steps, [1], '树已经线索化过（状态保留）。直接点「按线索中序遍历」演示无栈遍历。', thSnap(st, {}, '请点「按线索中序遍历」'));
+        }
+        return { steps: steps, state: st };
+      }
+      /* walk：按线索中序遍历 */
+      if (!st.threaded) {
+        push(steps, [9], '请先点「建树并线索化」。', thSnap(st, {}, '请先建树'));
+        return { steps: steps, state: st };
+      }
+      var p = st.root;
+      while (!p.ltag && p.left) { p = p.left; }
+      push(steps, [10, 11], '按线索遍历开始：从根出发，沿左指针一直走到最左下结点 ' + p.v + '（它就是中序第一个结点）。',
+        thSnap(st, { hl: (function () { var h = {}; h[p.id] = 'active'; return h; })() }, '起点 = ' + p.v));
+      var outVals = [], outIds = [], guard = 0;
+      while (p && guard++ < 100) {
+        outVals.push(p.v); outIds.push(p.id);
+        (function (cur) {
+          var h = {};
+          for (var k = 0; k < outIds.length; k++) { h[outIds[k]] = 'done'; }
+          h[cur.id] = 'active';
+          push(steps, [12, 13], '访问 ' + cur.v + '，当前输出：' + outVals.join(' → ') + '。',
+            thSnap(st, { hl: h }, '已访问：' + outVals.join(' ')));
+        })(p);
+        if (p.rtag === 1) {
+          var nx = p.right;
+          (function (cur, nxt) {
+            var h = {};
+            for (var k = 0; k < outIds.length; k++) { h[outIds[k]] = 'done'; }
+            if (nxt) { h[nxt.id] = 'active'; }
+            push(steps, [14], cur.v + ' 的右指针是右线索 → 直接跳到后继 ' + (nxt ? nxt.v : 'null（遍历结束）') + '，不需要栈帮忙回退。',
+              thSnap(st, { hl: h }, cur.v + ' → 右线索 → ' + (nxt ? nxt.v : '结束')));
+          })(p, nx);
+          p = nx;
+        } else {
+          p = p.right;
+          while (p && !p.ltag && p.left) { p = p.left; }
+          (function (cur) {
+            var h = {};
+            for (var k = 0; k < outIds.length; k++) { h[outIds[k]] = 'done'; }
+            if (cur) { h[cur.id] = 'active'; }
+            push(steps, [15], cur ? (cur.v + ' 的右指针是真孩子 → 进入右子树，再沿左指针走到最左下 ' + cur.v + '（下一个中序结点）。') : '右子树为空，遍历结束。',
+              thSnap(st, { hl: h }, cur ? '下一个 = ' + cur.v : '遍历结束'));
+          })(p);
+        }
+      }
+      push(steps, [12], '按线索中序遍历完成：' + outVals.join(' → ') + '，全程只用了两条局部指针，没有任何栈。',
+        thSnap(st, {}, '中序序列：' + outVals.join(' ')));
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s || !s.nodes || !s.nodes.length) {
+        kr.html('__e', S.text(500, 280, '线索二叉树：输入结点序列后点击「建树并线索化」。', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '线索二叉树（虚线 = 前驱 / 后继线索）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      /* 由扁平结点表重建布局树（真孩子构成的普通树，无线索环） */
+      var byId = {};
+      s.nodes.forEach(function (n) { byId[n.id] = n; });
+      function build(id) {
+        var n = byId[id];
+        return { id: id, v: n.v,
+          left: n.ltag === 1 || !n.leftId ? null : build(n.leftId),
+          right: n.rtag === 1 || !n.rightId ? null : build(n.rightId) };
+      }
+      var lay = DSV.treeLayout(build(s.nodes[0].id), { top: 96, dy: 64 });
+      var pos = lay.pos;
+      var ge = kr.g('__te', 'translate(0,0)', 'k');
+      /* 真边 */
+      var ed = '';
+      s.nodes.forEach(function (n) {
+        var p = pos[n.id];
+        if (n.leftId && n.ltag !== 1 && pos[n.leftId]) { ed += S.line(p.x, p.y, pos[n.leftId].x, pos[n.leftId].y, 'edge tree'); }
+        if (n.rightId && n.rtag !== 1 && pos[n.rightId]) { ed += S.line(p.x, p.y, pos[n.rightId].x, pos[n.rightId].y, 'edge tree'); }
+      });
+      kr.html('__realedges', ed, ge);
+      /* 线索（虚线曲线） */
+      var td = '';
+      s.nodes.forEach(function (n) {
+        var p = pos[n.id];
+        if (n.ltag === 1 && n.leftId && pos[n.leftId]) {
+          var q = pos[n.leftId];
+          td += S.path('M ' + p.x + ' ' + (p.y + 18) + ' C ' + p.x + ' ' + (p.y + 78) + ', ' + q.x + ' ' + (q.y + 78) + ', ' + q.x + ' ' + (q.y + 18), 'edge path', 'stroke-dasharray="5 4"');
+        }
+        if (n.rtag === 1 && n.rightId && pos[n.rightId]) {
+          var q2 = pos[n.rightId];
+          td += S.path('M ' + p.x + ' ' + (p.y + 18) + ' C ' + p.x + ' ' + (p.y + 78) + ', ' + q2.x + ' ' + (q2.y + 78) + ', ' + q2.x + ' ' + (q2.y + 18), 'edge path', 'stroke-dasharray="5 4"');
+        }
+      });
+      kr.html('__threads', td, ge);
+      /* 结点 */
+      var gn = kr.g('__tn', 'translate(0,0)', 'k');
+      s.nodes.forEach(function (n) {
+        var p = pos[n.id];
+        kr.g('tn_' + n.id, 'translate(' + p.x + ',' + p.y + ')', 'k nd ' + (s.hl[n.id] || ''),
+          S.circle(0, 0, 20) + S.text(0, 0, n.v) +
+          S.text(-13, -13, n.ltag === 1 ? '⇐' : '', 'tag') + S.text(13, -13, n.rtag === 1 ? '⇒' : '', 'tag'), gn);
+      });
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     11. 树、森林与二叉树转换（左孩子右兄弟法）
+     ============================================================ */
+  DSV.register({
+    id: 'idx-tree-convert', name: '树、森林与二叉树转换', category: '索引结构',
+    desc: '左孩子右兄弟法：原树中结点的第一个孩子作二叉树的左孩子，下一个兄弟作右孩子，森林中后一棵树的根作前一棵树根的右孩子。转换一一对应且可逆，过程 O(n)，把无序树问题转化为熟悉的二叉树问题。',
+    code: [
+      '// 原树 → 二叉树（左孩子右兄弟）',
+      'convert(森林):',
+      '  for 每个原结点 u:',
+      '    if u 有第一个孩子 c0:',
+      '      c0 成为 u 在二叉树中的左孩子',
+      '    for u 的兄弟链 c1, c2, ...:',
+      '      c(i+1) 成为 c(i) 的右孩子      // 兄弟连成右链',
+      '  if 有多棵树:',
+      '    第 i+1 棵树的根成为第 i 棵树根的右孩子'
+    ],
+    inputs: [{ key: 'edges', label: '边表（每行：父结点 孩子结点）', def: 'A B\nA C\nA D\nB E\nB F\nD G', hint: '每行一对，空格分隔', multiline: true }],
+    actions: [{ key: 'run', label: '开始转换', primary: true }],
+    samples: [
+      { label: '示例：普通树', values: { edges: 'A B\nA C\nA D\nB E\nB F\nD G' } },
+      { label: '示例：森林（两棵树）', values: { edges: 'A B\nA C\nD E\nD F' } }
+    ],
+    random: function () {
+      var names = 'ABCDEFG';
+      var lines = [], used = 1, i;
+      var nkids = DSV.ri(2, 3);
+      for (i = 0; i < nkids && used < 7; i++) {
+        var k = names.charAt(used++);
+        lines.push('A ' + k);
+        if (Math.random() < 0.6 && used < 7) { lines.push(k + ' ' + names.charAt(used++)); }
+      }
+      return { edges: lines.join('\n') };
+    },
+    run: function (v) {
+      var lines = String(v.edges == null ? '' : v.edges).split(/\r?\n/);
+      var reg = {}, children = [], steps = [], i, nm;
+      for (i = 0; i < lines.length; i++) {
+        var t = lines[i].split(/[\s,，]+/).filter(function (x) { return x !== ''; });
+        if (t.length < 2) { continue; }
+        var p = t[0].slice(0, 6), c = t[1].slice(0, 6);
+        if (!reg[p]) { reg[p] = { id: p, name: p, kids: [] }; }
+        if (!reg[c]) { reg[c] = { id: c, name: c, kids: [] }; }
+        reg[p].kids.push(reg[c]);
+        children.push(c);
+      }
+      var roots = [];
+      for (nm in reg) {
+        if (!reg.hasOwnProperty(nm)) { continue; }
+        if (children.indexOf(nm) < 0) { roots.push(reg[nm]); }
+      }
+      if (!roots.length) {
+        return [{ code: [1], desc: '输入无效：请填写边表（每行「父 子」一对）。', snap: { empty: true, msg: '示例：A B / A C / B E（每行一对）' } }];
+      }
+      var bin = {};
+      for (nm in reg) { if (reg.hasOwnProperty(nm)) { bin[nm] = { id: 'b_' + nm, v: nm, left: null, right: null }; } }
+      function csnap(hl, msg) {
+        return {
+          wrap: { id: 'WRAP', kids: roots.map(function (r) { return { id: r.id, name: r.name, kids: r.kids }; }) },
+          binRoot: DSV.clone(bin[roots[0].name]),
+          hl: hl || {}, msg: msg || ''
+        };
+      }
+      var namesTxt = '';
+      for (nm in reg) { if (reg.hasOwnProperty(nm)) { namesTxt += (namesTxt ? '、' : '') + nm; } }
+      push(steps, [1], '原结构：共 ' + roots.length + ' 棵树（森林），结点 ' + namesTxt + '。下面用「左孩子右兄弟」法逐结点转换为二叉树。',
+        csnap({}, '原结构就绪'));
+      var queue = roots.slice();
+      while (queue.length) {
+        var u = queue.shift();
+        var kids = u.kids;
+        var h = {}; h[u.name] = 'active';
+        if (kids.length) {
+          bin[u.name].left = bin[kids[0].name];
+          var chain = '';
+          for (i = 0; i < kids.length - 1; i++) {
+            bin[kids[i].name].right = bin[kids[i + 1].name];
+            chain += (chain ? '、' : '') + kids[i].name + ' 的右孩子 = ' + kids[i + 1].name;
+          }
+          push(steps, [2, 3], '处理结点 ' + u.name + '：第一个孩子 ' + kids[0].name + ' 成为它在二叉树中的左孩子' +
+            (kids.length > 1 ? '；其余兄弟连成右链：' + chain + '。' : '；它没有其他兄弟。'),
+            csnap(h, u.name + ' 的第一个孩子 ' + kids[0].name + ' 作左孩子'));
+          for (i = 0; i < kids.length; i++) { queue.push(kids[i]); }
+        } else {
+          push(steps, [2], '处理叶子结点 ' + u.name + '：它没有孩子，左孩子位置留空。',
+            csnap(h, u.name + ' 是叶子'));
+        }
+      }
+      if (roots.length > 1) {
+        for (i = 0; i < roots.length - 1; i++) { bin[roots[i].name].right = bin[roots[i + 1].name]; }
+        var rt = roots.map(function (r) { return r.name; }).join(' → ');
+        push(steps, [6, 7], '这是一片森林：把第 2…' + roots.length + ' 棵树的根依次作为前一棵树根的右孩子（' + rt + '），整片森林就对应一棵二叉树。',
+          csnap({}, '森林根之间连成右链'));
+      }
+      push(steps, [1], '转换完成：左图是原树/森林，右图是等价二叉树（右链=兄弟）。反之，把右图左孩子的左子孙全作孩子、右子孙全作兄弟即可还原原树。',
+        csnap({}, '转换完成'));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || s.empty) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || '树/森林转二叉树：在边表里每行填一对「父 子」。', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '树、森林 → 二叉树（左孩子右兄弟法）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      kr.html('__ol', S.text(240, 84, '原树 / 森林', 'vt'));
+      kr.html('__bl', S.text(760, 84, '对应二叉树', 'vt'));
+      function layN(root) {
+        var slot = {}, dep = {}, cursor = 0;
+        (function w(nn, d) {
+          dep[nn.id] = d;
+          var ks = nn.kids || [];
+          if (!ks.length) { slot[nn.id] = cursor++; return; }
+          for (var i = 0; i < ks.length; i++) { w(ks[i], d + 1); }
+          slot[nn.id] = (slot[ks[0].id] + slot[ks[ks.length - 1].id]) / 2;
+        })(root, 0);
+        var span = Math.max(1, cursor - 1), pos = {};
+        for (var id in slot) {
+          if (!slot.hasOwnProperty(id)) { continue; }
+          pos[id] = { x: 240 + (slot[id] - (span - 1) / 2) * (360 / span), y: 130 + dep[id] * 72 };
+        }
+        return pos;
+      }
+      var opos = layN(s.wrap);
+      var oge = kr.g('__oe', 'translate(0,0)', 'k'), ogn = kr.g('__on', 'translate(0,0)', 'k');
+      (function ow(nn) {
+        var p = opos[nn.id], ks = nn.kids || [];
+        for (var i = 0; i < ks.length; i++) {
+          var cp = opos[ks[i].id];
+          kr.html('oe_' + nn.id + '_' + ks[i].id, S.line(p.x, p.y, cp.x, cp.y, 'edge tree'), oge);
+          ow(ks[i]);
+        }
+        if (nn.id === 'WRAP') { return; }
+        kr.g('on_' + nn.id, 'translate(' + p.x + ',' + p.y + ')', 'k nd ' + (s.hl[nn.name] || ''),
+          S.circle(0, 0, 18) + S.text(0, 0, nn.name), ogn);
+      })(s.wrap);
+      var blay = DSV.treeLayout(s.binRoot, { w: 440, top: 130, dy: 72, nodeSize: 44 });
+      var bpos = blay.pos;
+      var bge = kr.g('__be', 'translate(520,0)', 'k'), bgn = kr.g('__bn', 'translate(520,0)', 'k');
+      (function bw(nn) {
+        if (!nn) { return; }
+        var p = bpos[nn.id];
+        if (!p) { return; }
+        if (nn.left && bpos[nn.left.id]) { kr.html('be_' + nn.id + '_l', S.line(p.x, p.y, bpos[nn.left.id].x, bpos[nn.left.id].y, 'edge tree'), bge); }
+        if (nn.right && bpos[nn.right.id]) { kr.html('be_' + nn.id + '_r', S.line(p.x, p.y, bpos[nn.right.id].x, bpos[nn.right.id].y, 'edge path'), bge); }
+        kr.g('bn_' + nn.id, 'translate(' + p.x + ',' + p.y + ')', 'k nd ' + (s.hl[nn.v] || ''),
+          S.circle(0, 0, 18) + S.text(0, 0, nn.v), bgn);
+        bw(nn.left); bw(nn.right);
+      })(s.binRoot);
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     12. Treap 树堆（BST + 小根堆）
+     ============================================================ */
+  DSV.register({
+    id: 'idx-treap', name: 'Treap 树堆', category: '索引结构',
+    desc: '每个结点同时存键值 k 与随机优先级 pr：按 k 满足二叉搜索树、按 pr 满足小根堆。插入后沿路径向上旋转维持堆性质，删除时把结点旋转成叶子再摘掉；随机 pr 使树期望平衡，三种操作期望均为 O(log n)，比 AVL 实现更简单。',
+    code: [
+      '// 结点 = 键值 k（BST 序）+ 随机优先级 pr（小根堆）',
+      'insert(x, pr):',
+      '  先按 BST 规则把 x 插到叶子位置',
+      '  while 父结点.pr > 当前结点.pr:',
+      '    把当前结点向上旋转（左旋 / 右旋）',
+      '',
+      'delete(x):',
+      '  while x 不是叶子:',
+      '    把孩子中 pr 较小的那个旋转上来',
+      '  删除叶子 x'
+    ],
+    inputs: [
+      { key: 'init', label: '键值序列', def: '20,50,30,80,10,60', hint: '逗号分隔' },
+      { key: 'prs', label: '优先级序列（可空）', def: '5,2,8,1,9,3', hint: '与键值一一对应，留空则随机生成' }
+    ],
+    actions: [
+      { key: 'build', label: '建堆插入', primary: true },
+      { key: 'insert', label: '插入', arg: { label: '键值', def: '40' } },
+      { key: 'delete', label: '删除', arg: { label: '键值', def: '30' } }
+    ],
+    samples: [
+      { label: '示例：插入即旋转', values: { init: '20,50,30,80,10,60', prs: '5,2,8,1,9,3' } },
+      { label: '示例：优先级随机', values: { init: '10,20,30,40', prs: '' } }
+    ],
+    random: function () {
+      var n = DSV.ri(5, 7);
+      return { init: DSV.uniq(DSV.randArr(n, 10, 99)).join(','), prs: DSV.shuffle(DSV.randArr(n, 1, 99)).join(',') };
+    },
+    run: function (v, action, state) {
+      var st = state || { root: null, next: 1 };
+      var steps = [];
+      var key = (action && action.key) || 'build';
+      var arg = (action && action.arg != null) ? String(action.arg).trim() : '';
+      var i;
+      function snap(hl, msg) { return { root: DSV.clone(st.root), hl: hl || {}, msg: msg || '' }; }
+      /** BST 插入，返回新结点（重复返回 null） */
+      function tIns(x, pr) {
+        if (!st.root) { st.root = mkNode(x, st, { pr: pr }); return st.root; }
+        var cur = st.root;
+        while (true) {
+          if (x < cur.v) { if (!cur.left) { cur.left = mkNode(x, st, { pr: pr }); return cur.left; } cur = cur.left; }
+          else if (x > cur.v) { if (!cur.right) { cur.right = mkNode(x, st, { pr: pr }); return cur.right; } cur = cur.right; }
+          else { return null; }
+        }
+      }
+      /** 从 node 向上旋转直到堆性质满足 */
+      function rebalanceUp(node) {
+        var guard = 0;
+        while (node !== st.root && guard++ < 20) {
+          var par = findParent(st.root, node);
+          if (!par || par.pr <= node.pr) { break; }
+          var side = (par.left && par.left.id === node.id) ? 'left' : 'right';
+          var gp = findParent(st.root, par);
+          var parV = par.v;
+          var up = rotate(st, par, gp, side);
+          push(steps, [3, 4], '父结点 ' + parV + ' 的 pr=' + par.pr + ' 大于孩子 ' + up.v + ' 的 pr=' + up.pr + '（小根堆被破坏）→ 做' + rotName(side) + '，把 ' + up.v + ' 升到父位置。',
+            snap(one(up.id, 'swap'), up.v + ' 向上' + rotName(side)));
+          node = up;
+        }
+      }
+      /** BST 定位路径提示 */
+      function locate(x) {
+        var path = [], cur = st.root;
+        while (cur) {
+          path.push(cur);
+          if (x === cur.v) { break; }
+          cur = x < cur.v ? cur.left : cur.right;
+        }
+        return { path: path, found: cur };
+      }
+
+      if (key === 'build') {
+        var ks = DSV.nums(v.init, 10), ps = DSV.nums(v.prs, 10);
+        if (!ks.length) {
+          push(steps, [1], '键值序列为空，无法建树。', snap({}, '请填写键值序列'));
+          return { steps: steps, state: st };
+        }
+        push(steps, [1], '开始按序列插入 ' + ks.join(' → ') + '，每个结点带优先级 pr' + (ps.length ? '：' + ps.join(', ') : '（未指定，自动随机生成）') + '。',
+          snap({}, '初始化'));
+        for (i = 0; i < ks.length; i++) {
+          (function (x, p) {
+            var loc = locate(x);
+            if (st.root) {
+              var h = {};
+              loc.path.forEach(function (nd) { h[nd.id] = 'path'; });
+              push(steps, [2], '插入 ' + x + '（pr=' + p + '）：按 BST 规则从根向下寻找空位置。',
+                snap(h, 'BST 定位 ' + x));
+            }
+            var node = tIns(x, p);
+            if (!node) {
+              push(steps, [2], x + ' 已在树中，跳过。', snap(loc.found ? one(loc.found.id, 'compare') : {}, x + ' 已存在'));
+              return;
+            }
+            push(steps, [2], x + '（pr=' + p + '）已作为叶子接入。',
+              snap(one(node.id, 'active'), '新叶子 ' + x + '（pr=' + p + '）'));
+            rebalanceUp(node);
+          })(ks[i], ps.length ? ps[i] : DSV.ri(1, 99));
+        }
+        push(steps, [1], '建堆插入完成：这棵树既满足按键值的 BST，又满足按 pr 的小根堆。',
+          snap({}, '建堆完成'));
+        return { steps: steps, state: st };
+      }
+
+      if (key === 'insert') {
+        var xv = parseInt(arg, 10);
+        if (!isFinite(xv)) {
+          push(steps, [2], '插入失败：请在「键值」框中填写一个整数。', snap({}, '输入非法'));
+          return { steps: steps, state: st };
+        }
+        var loc2 = locate(xv);
+        if (st.root) {
+          var h2 = {};
+          loc2.path.forEach(function (nd) { h2[nd.id] = 'path'; });
+          push(steps, [2], '插入 ' + xv + '：按 BST 规则从根向下寻找空位置。', snap(h2, 'BST 定位 ' + xv));
+        }
+        var node2 = tIns(xv, DSV.ri(1, 99));
+        if (!node2) {
+          push(steps, [2], xv + ' 已在树中，跳过。', snap(loc2.found ? one(loc2.found.id, 'compare') : {}, xv + ' 已存在'));
+        } else {
+          push(steps, [2], xv + ' 已作为叶子接入，随后检查堆性质。', snap(one(node2.id, 'active'), '新叶子 ' + xv));
+          rebalanceUp(node2);
+        }
+        return { steps: steps, state: st };
+      }
+
+      if (key === 'delete') {
+        var dv = parseInt(arg, 10);
+        if (!st.root) {
+          push(steps, [6], '树为空，无法删除。', snap({}, '空树'));
+          return { steps: steps, state: st };
+        }
+        var loc3 = locate(dv);
+        if (!loc3.found) {
+          push(steps, [6], '树中没有键值 ' + dv + '。', snap({}, '未找到 ' + dv));
+          return { steps: steps, state: st };
+        }
+        var cur = loc3.found;
+        push(steps, [6], '找到待删结点 ' + dv + '（pr=' + cur.pr + '）：不断把它孩子中 pr 较小者旋转上来，直到它变成叶子。',
+          snap(one(cur.id, 'active'), '旋转成叶子'));
+        var guard = 0;
+        while ((cur.left || cur.right) && guard++ < 20) {
+          var lpr = cur.left ? cur.left.pr : Infinity, rpr = cur.right ? cur.right.pr : Infinity;
+          var side = lpr <= rpr ? 'left' : 'right';
+          var gp = findParent(st.root, cur);
+          var up = rotate(st, cur, gp, side);
+          push(steps, [7], cur.v + ' 还有孩子：把 pr 较小的' + (side === 'left' ? '左' : '右') + '孩子旋转上来，' + cur.v + ' 又下沉一层。',
+            snap(one(up.id, 'swap'), up.v + ' 旋上来，' + cur.v + ' 下沉'));
+        }
+        var par = findParent(st.root, cur);
+        if (!par) { st.root = null; }
+        else if (par.left && par.left.id === cur.id) { par.left = null; }
+        else { par.right = null; }
+        push(steps, [8], cur.v + ' 已是叶子，直接摘掉。Treap 删除完成。', snap({}, '已删除 ' + dv));
+        return { steps: steps, state: st };
+      }
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s || !s.root) {
+        kr.html('__e', S.text(500, 280, 'Treap：输入键值（与可选优先级）后点击「建堆插入」。', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, 'Treap 树堆（圆内=键值，下方小字=优先级 pr）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      DSV.drawTree(kr, s.root, {
+        top: 92, dy: 72,
+        node: function (n) { return { inner: S.circle(0, 0, 24) + S.text(0, 0, n.v) + S.text(0, 36, 'pr=' + n.pr, 'tag'), cls: s.hl[n.id] || '' }; }
+      });
+      kr.end();
+    }
+  });
+
 })();

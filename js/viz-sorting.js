@@ -851,4 +851,314 @@
     }
   });
 
+  /* ============================================================
+     11. 外部排序（多路归并 + 胜者树）
+     ============================================================ */
+  var ACT_RUN = [{ key: 'run', label: '开始演示', primary: true }];
+
+  DSV.register({
+    id: 'srt-external', name: '外部排序（多路归并）', category: '排序',
+    desc: '数据量大到装不进内存时，先分段读入排序成若干个有序段，再用胜者树做 k 路归并：每次从 k 段中取最小值输出。每选一个元素只需沿树走一条路径比较，O(log k)，总时间 O(n log k)，避免朴素 k-1 次手动比较。',
+    viewBox: '0 0 1000 720',
+    code: [
+      'externalMerge(runs):',                       // 0
+      '  建胜者树：叶子 = 各段当前元素',             // 1
+      '  内部结点 = 两孩子中的较小者',               // 2
+      '  while 树根 != ∞:',                          // 3
+      '    输出树根的值（来自最小的那一路）',          // 4
+      '    该路指针前进到下一个元素',                // 5
+      '    沿路径重新比较，更新胜者树',              // 6
+      '  结束'                                       // 7
+    ],
+    inputs: [{ key: 'runs', label: '有序段（每行一段）', def: '10,20,30\n15,25,35\n12,18,28', hint: '每行一个已升序段，逗号分隔', multiline: true }],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：3 路归并', values: { runs: '10,20,30\n15,25,35\n12,18,28' } },
+      { label: '示例：4 路归并', values: { runs: '1,5,9\n2,6,10\n3,7,11\n4,8,12' } }
+    ],
+    random: function () {
+      var lines = [], r, t;
+      for (r = 0; r < 3; r++) {
+        var arr = [];
+        for (t = 0; t < 3; t++) { arr.push(DSV.ri(1, 30)); }
+        arr.sort(function (a, b) { return a - b; });
+        lines.push(arr.join(','));
+      }
+      return { runs: lines.join('\n') };
+    },
+    run: function (v) {
+      var raw = String(v.runs || '');
+      var lines = raw.split(/\r?\n/);
+      var runs = [];
+      for (var i = 0; i < lines.length; i++) {
+        var nums = DSV.nums(lines[i], 10);
+        if (nums.length) {
+          nums.sort(function (a, b) { return a - b; });
+          runs.push(nums);
+        }
+      }
+      var st = [];
+      if (!runs.length) {
+        return [{ code: [0], desc: '没有可归并的有序段，请在多行输入中每行给出一段',
+          snap: { runs: [], ptrs: [], cur: [], tree: null, out: [], hlLeaf: -1, title: '外部排序', sub: '空输入', warn: true } }];
+      }
+      var k = runs.length;
+      var ptrs = [];
+      for (var r0 = 0; r0 < k; r0++) { ptrs.push(0); }
+      var out = [];
+
+      function curVal(r) { return ptrs[r] < runs[r].length ? runs[r][ptrs[r]] : Infinity; }
+      function buildTree(lo, hi) {
+        if (lo === hi - 1) {
+          return { id: 'l' + lo, v: curVal(lo), run: lo, left: null, right: null, isLeaf: true };
+        }
+        var mid = Math.floor((lo + hi) / 2);
+        var L = buildTree(lo, mid);
+        var R = buildTree(mid, hi);
+        var win = (L.v <= R.v) ? L : R;
+        return { id: 'n' + lo + '_' + hi, v: win.v, run: win.run, left: L, right: R, isLeaf: false };
+      }
+      function snap(title, sub, hlLeaf, warn) {
+        return {
+          runs: runs.map(function (r) { return r.slice(); }),
+          ptrs: ptrs.slice(),
+          cur: ptrs.map(function (p, r) { return curVal(r); }),
+          tree: buildTree(0, k),
+          out: out.slice(),
+          hlLeaf: (hlLeaf == null ? -1 : hlLeaf),
+          title: title, sub: sub || '', warn: !!warn
+        };
+      }
+
+      push(st, [0, 1, 2], '开始多路归并：共 ' + k + ' 个有序段，长度分别为 [' +
+        runs.map(function (r) { return r.length; }).join(', ') +
+        ']。为每段建立一个叶子结点，内部结点取两孩子较小者作为胜者',
+        snap('外部排序', '建胜者树'));
+
+      var stepCount = 0;
+      while (true) {
+        var root = buildTree(0, k);
+        if (!isFinite(root.v)) { break; }
+        var winRun = root.run;
+        var winVal = root.v;
+        stepCount++;
+
+        push(st, [4], '第 ' + stepCount + ' 次输出：胜者树树根 = ' + winVal +
+          '，来自第 ' + (winRun + 1) + ' 路（该路当前指针在位置 ' + ptrs[winRun] + '）',
+          snap('外部排序', '输出 ' + winVal, winRun));
+
+        out.push(winVal);
+        ptrs[winRun]++;
+        var nextVal = curVal(winRun);
+        push(st, [5, 6], '第 ' + (winRun + 1) + ' 路指针前进到 ' + ptrs[winRun] +
+          (isFinite(nextVal) ? '，下一个元素是 ' + nextVal + '，沿路径重新比较更新胜者树' :
+            '，该路已耗尽（置为 ∞），沿路径重新比较更新胜者树'),
+          snap('外部排序', '前进指针', winRun));
+      }
+
+      push(st, [7], '归并完成：所有有序段已耗尽，共输出 ' + out.length + ' 个元素，结果 = [' + out.join(', ') +
+        ']。每输出一个元素只需 O(log k) 次比较，k=' + k,
+        snap('外部排序', '归并完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 300, '外部排序：在多行输入中每行给出一个有序段后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, s.title || '外部排序（多路归并）：胜者树', 'vt'));
+      kr.html('__t2', S.text(500, 50, s.sub || '', 'vs'));
+
+      var runs = s.runs || [], k = runs.length;
+      var rowY = 90;
+      for (var r = 0; r < k; r++) {
+        kr.html('rl' + r, S.text(50, rowY + r * 30 + 5, '第' + (r + 1) + '路', 'vs'));
+        var cw = 40, x0 = 110;
+        for (var i = 0; i < runs[r].length; i++) {
+          var isCur = (i === s.ptrs[r]);
+          kr.g('rc' + r + '_' + i, 'translate(' + (x0 + i * (cw + 4) + cw / 2) + ',' + (rowY + r * 30) + ')', 'k',
+            '<rect class="cell ' + (isCur ? 'active' : (i < s.ptrs[r] ? 'done' : '')) + '" x="' + (-cw / 2 + 2) + '" y="-14" width="' + (cw - 4) + '" height="28" rx="4"/>' +
+            S.text(0, 0, runs[r][i], 'cell-txt'));
+        }
+        if (s.ptrs[r] >= runs[r].length) {
+          kr.g('rd' + r, 'translate(' + (x0 + runs[r].length * (cw + 4) + 20) + ',' + (rowY + r * 30) + ')', 'k',
+            '<rect class="cell dead" x="-20" y="-14" width="40" height="28" rx="4"/>' +
+            S.text(0, 0, '∞', 'cell-txt'));
+        }
+      }
+
+      kr.html('__th', S.text(500, 220, '胜者树（内部结点 = 两孩子较小者，树根 = 下一个输出）', 'vs'));
+      if (s.tree) {
+        DSV.drawTree(kr, s.tree, {
+          top: 250, dy: 60, dx: 60,
+          node: function (nd) {
+            var cls = '';
+            if (nd.isLeaf && s.hlLeaf === nd.run) { cls = 'swap'; }
+            if (!isFinite(nd.v)) { cls = 'dead'; }
+            return {
+              inner: S.circle(0, 0, nd.isLeaf ? 18 : 22) + S.text(0, 0, isFinite(nd.v) ? nd.v : '∞') +
+                (nd.isLeaf ? S.text(0, 30, '路' + (nd.run + 1), 'tag') : S.text(0, 32, 'min', 'tag')),
+              cls: cls
+            };
+          },
+          edge: function (pa, ch) { return 'tree'; }
+        });
+      }
+
+      kr.html('__oh', S.text(500, 470, '归并输出带', 'vs'));
+      var out = s.out || [];
+      var ocw = 44, ototal = out.length * ocw + Math.max(0, out.length - 1) * 6, ox0 = (1000 - ototal) / 2;
+      for (var i2 = 0; i2 < out.length; i2++) {
+        kr.g('o' + i2, 'translate(' + (ox0 + i2 * (ocw + 6) + ocw / 2) + ',510)', 'k',
+          '<rect class="cell done" x="' + (-ocw / 2 + 2) + '" y="-16" width="' + (ocw - 4) + '" height="32" rx="4"/>' +
+          S.text(0, 0, out[i2], 'cell-txt'));
+      }
+      if (!out.length) { kr.html('__oe', S.text(500, 510, '（空）', 'vs')); }
+
+      if (s.warn) { kr.html('__m', S.text(500, 590, s.sub || '', 'vwarn')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     12. 鸡尾酒排序（双向冒泡）
+     ============================================================ */
+  DSV.register({
+    id: 'srt-cocktail', name: '鸡尾酒排序', category: '排序',
+    desc: '冒泡排序的双向版本：先从左到右把最大值推到右端，再从右到左把最小值推到左端，收缩两端边界直到某轮没有交换。对基本有序但两端有小元素的序列比冒泡快，稳定排序，平均/最坏 O(n²)，最好 O(n)。',
+    code: [
+      'cocktailSort(A):',                              // 0
+      '  lo = 0; hi = n-1',                            // 1
+      '  while lo < hi:',                               // 2
+      '    swapped = false',                            // 3
+      '    for i = lo to hi-1:',                       // 4
+      '      if A[i] > A[i+1]: swap; swapped = true',   // 5
+      '    hi = hi - 1',                                // 6
+      '    for i = hi downto lo+1:',                   // 7
+      '      if A[i-1] > A[i]: swap; swapped = true',  // 8
+      '    lo = lo + 1',                                // 9
+      '    if not swapped: break',                      // 10
+      '  return A'                                      // 11
+    ],
+    inputs: IN, samples: SAM, random: RND,
+    run: function (v) {
+      var a = DSV.nums(v.arr, 16), n = a.length;
+      if (n < 2) { return []; }
+      var st = [], c = zeros(n), done = [];
+      for (var q = 0; q < n; q++) { done.push(false); }
+      function cc() { var o = []; for (var i = 0; i < n; i++) { o[i] = done[i] ? 'done' : (c[i] || ''); } return o; }
+      function sn(idx, sub) { return { a: a.slice(), c: cc(), idx: idx || [], title: '鸡尾酒排序', sub: sub || '' }; }
+
+      push(st, [0, 1], '开始鸡尾酒排序：lo = 0，hi = ' + (n - 1), sn());
+      var lo = 0, hi = n - 1;
+      while (lo < hi) {
+        var swapped = false;
+        c = zeros(n);
+        push(st, [3, 4], '从左到右扫描 [' + lo + '…' + hi + ']：把最大值向右推',
+          sn([{ i: lo, t: 'lo' }, { i: hi, t: 'hi' }], '左→右扫描'));
+        for (var j = lo; j < hi; j++) {
+          c = zeros(n); c[j] = 'compare'; c[j + 1] = 'compare';
+          push(st, [5], '比较 A[' + j + ']=' + a[j] + ' 与 A[' + (j + 1) + ']=' + a[j + 1] + '：' +
+            (a[j] > a[j + 1] ? a[j] + ' > ' + a[j + 1] + '，逆序交换' : '不交换'),
+            sn([{ i: j, t: 'j' }, { i: j + 1, t: 'j+1' }], '左→右扫描'));
+          if (a[j] > a[j + 1]) {
+            var t = a[j]; a[j] = a[j + 1]; a[j + 1] = t;
+            swapped = true;
+            c = zeros(n); c[j] = 'swap'; c[j + 1] = 'swap';
+            push(st, [5], '交换后：[' + a.join(', ') + ']',
+              sn([{ i: j, t: 'j', c: 1 }, { i: j + 1, t: 'j+1', c: 1 }], '左→右扫描'));
+          }
+        }
+        done[hi] = true;
+        hi--;
+        push(st, [6], '左→右轮结束：A[' + (hi + 1) + '] 已就位（本轮最大值），hi 收缩为 ' + hi,
+          sn([{ i: hi + 1, t: '就位' }], '右边界收缩'));
+        if (!swapped || lo >= hi) { break; }
+
+        swapped = false;
+        c = zeros(n);
+        push(st, [7, 8], '从右到左扫描 [' + lo + '…' + hi + ']：把最小值向左推',
+          sn([{ i: lo, t: 'lo' }, { i: hi, t: 'hi' }], '右→左扫描'));
+        for (var j2 = hi; j2 > lo; j2--) {
+          c = zeros(n); c[j2 - 1] = 'compare'; c[j2] = 'compare';
+          push(st, [8], '比较 A[' + (j2 - 1) + ']=' + a[j2 - 1] + ' 与 A[' + j2 + ']=' + a[j2] + '：' +
+            (a[j2 - 1] > a[j2] ? a[j2 - 1] + ' > ' + a[j2] + '，逆序交换' : '不交换'),
+            sn([{ i: j2 - 1, t: 'j-1' }, { i: j2, t: 'j' }], '右→左扫描'));
+          if (a[j2 - 1] > a[j2]) {
+            var t2 = a[j2 - 1]; a[j2 - 1] = a[j2]; a[j2] = t2;
+            swapped = true;
+            c = zeros(n); c[j2 - 1] = 'swap'; c[j2] = 'swap';
+            push(st, [8], '交换后：[' + a.join(', ') + ']',
+              sn([{ i: j2 - 1, t: 'j-1', c: 1 }, { i: j2, t: 'j', c: 1 }], '右→左扫描'));
+          }
+        }
+        done[lo] = true;
+        lo++;
+        push(st, [9], '右→左轮结束：A[' + (lo - 1) + '] 已就位（本轮最小值），lo 收缩为 ' + lo,
+          sn([{ i: lo - 1, t: '就位' }], '左边界收缩'));
+        if (!swapped) { break; }
+      }
+      for (var m = 0; m < n; m++) { done[m] = true; }
+      push(st, [10, 11], '排序完成：' + a.join(', '), sn([], '全部就位'));
+      return st;
+    },
+    render: function (kr, s) { if (s) { drawArr(kr, s); } }
+  });
+
+  /* ============================================================
+     13. 梳排序（Comb Sort）
+     ============================================================ */
+  DSV.register({
+    id: 'srt-comb', name: '梳排序', category: '排序',
+    desc: '冒泡排序的改进：比较间隔 gap 从 n 开始，每轮按 1.3 缩小（gap = floor(gap/1.3)），直到 gap=1 退化为相邻冒泡。大间隔时元素可以一次跳很远，比冒泡少很多次相邻交换。不稳定，平均约 O(n log n)，最坏 O(n²)。',
+    code: [
+      'combSort(A):',                                  // 0
+      '  n = A.length',                                // 1
+      '  gap = n',                                     // 2
+      '  while gap > 1 or swapped:',                   // 3
+      '    swapped = false',                           // 4
+      '    gap = max(1, floor(gap / 1.3))',            // 5
+      '    for i = 0 to n-gap-1:',                     // 6
+      '      if A[i] > A[i+gap]: swap; swapped = true', // 7
+      '  return A'                                     // 8
+    ],
+    inputs: IN, samples: SAM, random: RND,
+    run: function (v) {
+      var a = DSV.nums(v.arr, 16), n = a.length;
+      if (n < 2) { return []; }
+      var st = [], c = zeros(n);
+      function sn(idx, sub) { return { a: a.slice(), c: c.slice(), idx: idx || [], title: '梳排序', sub: sub || '' }; }
+
+      push(st, [0, 1, 2], '开始梳排序：n = ' + n + '，初始间隔 gap = ' + n, sn());
+      var gap = n;
+      var swapped = true;
+      while (gap > 1 || swapped) {
+        swapped = false;
+        gap = Math.max(1, Math.floor(gap / 1.3));
+        c = zeros(n);
+        push(st, [5, 6], '新一轮：gap = floor(上轮 gap / 1.3) = ' + gap +
+          (gap === 1 ? '（gap=1，退化为相邻比较，即冒泡）' : ''),
+          sn([], 'gap = ' + gap));
+        for (var i = 0; i < n - gap; i++) {
+          c = zeros(n); c[i] = 'compare'; c[i + gap] = 'compare';
+          push(st, [7], '比较 A[' + i + ']=' + a[i] + ' 与 A[' + (i + gap) + ']=' + a[i + gap] +
+            '（相隔 ' + gap + '）：' + (a[i] > a[i + gap] ? '逆序，交换' : '不交换'),
+            sn([{ i: i, t: 'i' }, { i: i + gap, t: 'i+' + gap }], 'gap = ' + gap));
+          if (a[i] > a[i + gap]) {
+            var t = a[i]; a[i] = a[i + gap]; a[i + gap] = t;
+            swapped = true;
+            c = zeros(n); c[i] = 'swap'; c[i + gap] = 'swap';
+            push(st, [7], '交换后：[' + a.join(', ') + ']',
+              sn([{ i: i, t: 'i', c: 1 }, { i: i + gap, t: 'i+' + gap, c: 1 }], 'gap = ' + gap));
+          }
+        }
+        if (!swapped && gap === 1) { break; }
+      }
+      var d = zeros(n); for (var m = 0; m < n; m++) { d[m] = 'done'; }
+      push(st, [8], '排序完成：' + a.join(', '), { a: a.slice(), c: d, title: '梳排序', sub: '全部就位' });
+      return st;
+    },
+    render: function (kr, s) { if (s) { drawArr(kr, s); } }
+  });
+
 })();

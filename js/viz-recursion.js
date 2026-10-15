@@ -617,4 +617,281 @@
     }
   });
 
+  /* ============================================================
+     4. 汉诺塔（递归）
+     ============================================================ */
+  DSV.register({
+    id: 'rec-hanoi', name: '汉诺塔', category: '递归',
+    desc: '把 n 个圆盘从源柱移到目标柱：先把上面 n-1 个借助目标柱移到辅助柱，再把最大的第 n 个圆盘移到目标柱，最后把 n-1 个从辅助柱移到目标柱。共需 2^n - 1 次移动，时间复杂度 O(2^n)，递归深度 O(n)。',
+    viewBox: '0 0 1000 720',
+    code: [
+      'hanoi(n, src, dst, aux):',                          // 0
+      '  if n == 1:',                                      // 1
+      '    move src -> dst (圆盘 n)',                      // 2
+      '    return',                                        // 3
+      '  hanoi(n-1, src, aux, dst)   // 先移上面 n-1 个到辅助柱', // 4
+      '  move src -> dst (圆盘 n)     // 移最大圆盘',       // 5
+      '  hanoi(n-1, aux, dst, src)   // 再把 n-1 个移到目标柱'  // 6
+    ],
+    inputs: [{ key: 'n', label: '圆盘数 n', def: '3', hint: '2-4' }],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：n = 3（经典，7 步）', values: { n: '3' } },
+      { label: '示例：n = 4（15 步）', values: { n: '4' } }
+    ],
+    random: function () { return { n: String(DSV.ri(2, 4)) }; },
+    run: function (v) {
+      var n = parseInt(v.n, 10);
+      if (!isFinite(n) || n < 1) { n = 3; }
+      n = Math.max(1, Math.min(4, n));
+      var st = [];
+      var names = ['A', 'B', 'C'];
+      var pegs = [[], [], []];
+      var d, i;
+      for (d = n; d >= 1; d--) { pegs[0].push(d); }   // 柱 A 自底向上放 n, n-1, ..., 1
+      var moves = [];
+      var clsMap = {};
+      var treeId = 0;
+
+      function buildTree(nn, src, dst, aux) {
+        var node = { id: 'h' + (treeId++), n: nn, src: src, dst: dst, aux: aux, left: null, right: null };
+        if (nn > 1) {
+          node.left = buildTree(nn - 1, src, aux, dst);
+          node.right = buildTree(nn - 1, aux, dst, src);
+        }
+        return node;
+      }
+      var tree = buildTree(n, 'A', 'C', 'B');
+
+      function pegIdx(name) { return name === 'A' ? 0 : (name === 'B' ? 1 : 2); }
+      function snap(activeId, msg) {
+        return {
+          n: n,
+          pegs: pegs.map(function (p) { return p.slice(); }),
+          moves: moves.map(function (m) { return { disk: m.disk, from: m.from, to: m.to }; }),
+          tree: DSV.clone(tree),
+          activeId: activeId,
+          clsMap: DSV.clone(clsMap),
+          msg: msg || ''
+        };
+      }
+
+      push(st, [0], '开始：hanoi(' + n + ', A→C, 辅助=B)。初始时 ' + n + ' 个圆盘全部在柱 A，要求移到柱 C，每次只能移动一个圆盘且小盘必须在大盘之上',
+        snap(null, '调用 hanoi(' + n + ')'));
+
+      function walk(node) {
+        var si = pegIdx(node.src);
+        clsMap[node.id] = 'active';
+        push(st, [0], '进入 hanoi(' + node.n + ', ' + node.src + '→' + node.dst + ', 辅助=' + node.aux + ')',
+          snap(node.id, '调用 hanoi(' + node.n + ')'));
+
+        if (node.left) {
+          walk(node.left);
+          clsMap[node.id] = 'active';
+        }
+
+        var disk = pegs[si].pop();
+        pegs[pegIdx(node.dst)].push(disk);
+        moves.push({ disk: disk, from: node.src, to: node.dst });
+        clsMap[node.id] = 'swap';
+        push(st, [node.n === 1 ? 2 : 5],
+          '移动圆盘 ' + disk + '：' + node.src + ' → ' + node.dst + '（第 ' + moves.length + ' 次移动，共需 ' + (Math.pow(2, n) - 1) + ' 次）',
+          snap(node.id, '移动圆盘 ' + disk + ' ' + node.src + '→' + node.dst));
+
+        if (node.right) { walk(node.right); }
+
+        clsMap[node.id] = 'done';
+        push(st, [3, 6], 'hanoi(' + node.n + ', ' + node.src + '→' + node.dst + ') 完成，返回上一层',
+          snap(node.id, '返回 hanoi(' + node.n + ')'));
+      }
+      walk(tree);
+
+      push(st, [], '全部完成：' + n + ' 个圆盘已从柱 A 移到柱 C，共移动 ' + moves.length + ' 次（= 2^' + n + ' - 1）',
+        snap(null, '完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 280, '汉诺塔：输入圆盘数 n（2-4）后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 24, '汉诺塔：把 n 个圆盘从柱 A 移到柱 C，借助柱 B', 'vt'));
+      kr.html('__t2', S.text(500, 48, '金色 = 当前递归调用 · 红色 = 正在移动圆盘 · 绿色 = 已完成该层调用', 'vs'));
+
+      var pegX = [200, 500, 800], baseY = 260, names = ['A', 'B', 'C'];
+      var p, i;
+      for (p = 0; p < 3; p++) {
+        kr.html('peg' + p,
+          S.line(pegX[p], 100, pegX[p], baseY, 'edge') +
+          S.line(pegX[p] - 56, baseY, pegX[p] + 56, baseY, 'edge') +
+          S.text(pegX[p], baseY + 22, '柱 ' + names[p], 'vs'));
+        var disks = s.pegs[p] || [];
+        for (i = 0; i < disks.length; i++) {
+          var d = disks[i];
+          var w = 34 + d * 20;
+          var y = baseY - (i + 1) * 22;
+          kr.g('d' + p + '_' + i, 'translate(' + pegX[p] + ',' + y + ')', 'k',
+            '<rect class="cell done" x="' + (-w / 2) + '" y="-10" width="' + w + '" height="20" rx="4"/>' +
+            S.text(0, 0, d, 'cell-txt'));
+        }
+      }
+
+      kr.html('__mc', S.text(500, 310, '已完成移动 ' + s.moves.length + ' / ' + (Math.pow(2, s.n) - 1) + ' 次', 'vs'));
+      var last = s.moves[s.moves.length - 1];
+      if (last) {
+        kr.html('__lm', S.text(500, 334, '最近一次：圆盘 ' + last.disk + ' 从 ' + last.from + ' → ' + last.to, 'ptr'));
+      }
+
+      kr.html('__th', S.text(500, 372, '递归调用树（h(n, src→dst, 辅助=aux)）', 'vs'));
+      if (s.tree) {
+        DSV.drawTree(kr, s.tree, {
+          top: 400, dy: 62, dx: 46,
+          node: function (nd) {
+            var cls = (s.clsMap && s.clsMap[nd.id]) || '';
+            return {
+              inner: S.circle(0, 0, 20) + S.text(0, -3, 'h(' + nd.n + ')') + S.text(0, 14, nd.src + '→' + nd.dst, 'tag'),
+              cls: cls
+            };
+          },
+          edge: function (pa, ch) { return 'tree'; }
+        });
+      }
+      if (s.msg) { kr.html('__m', S.text(500, 700, s.msg, 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     5. 斐波那契（朴素递归，重复子问题）
+     ============================================================ */
+  DSV.register({
+    id: 'rec-fib', name: '斐波那契（递归）', category: '递归',
+    desc: 'fib(n) = fib(n-1) + fib(n-2)，基线 fib(0)=0, fib(1)=1。朴素递归会重复计算大量相同子问题：fib(5) 共触发 15 次调用，而真正不同的子问题只有 6 个。时间复杂度 O(2^n)，空间 O(n)；若加记忆化（memo）可降到 O(n)。',
+    viewBox: '0 0 1000 660',
+    code: [
+      'fib(n):',                                   // 0
+      '  if n <= 1: return n      // 基线',       // 1
+      '  return fib(n-1) + fib(n-2)'               // 2
+    ],
+    inputs: [{ key: 'n', label: 'n', def: '5', hint: '2-6' }],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：n = 5（fib(5)=5）', values: { n: '5' } },
+      { label: '示例：n = 6（重复子问题更多）', values: { n: '6' } }
+    ],
+    random: function () { return { n: String(DSV.ri(3, 6)) }; },
+    run: function (v) {
+      var n = parseInt(v.n, 10);
+      if (!isFinite(n) || n < 0) { n = 5; }
+      n = Math.max(2, Math.min(6, n));
+      var st = [], i;
+      var memo = []; for (i = 0; i <= n; i++) { memo.push(null); }
+      var visits = {};
+      var treeId = 0;
+
+      function buildTree(k) {
+        var node = { id: 'f' + (treeId++), k: k, left: null, right: null };
+        if (k > 1) {
+          node.left = buildTree(k - 1);
+          node.right = buildTree(k - 2);
+        }
+        return node;
+      }
+      var tree = buildTree(n);
+
+      function snap(activeId, clsMap, msg) {
+        return {
+          n: n,
+          tree: DSV.clone(tree),
+          activeId: activeId,
+          clsMap: DSV.clone(clsMap || {}),
+          memo: memo.slice(),
+          visits: DSV.clone(visits),
+          msg: msg || ''
+        };
+      }
+
+      push(st, [0], '开始 fib(' + n + ')：朴素递归 fib(n)=fib(n-1)+fib(n-2)。注意观察同一子问题 f(k) 被反复进入的情况（灰色结点）',
+        snap(null, {}, '调用 fib(' + n + ')'));
+
+      var clsMap = {};
+      function walk(node) {
+        var k = node.k;
+        visits[k] = (visits[k] || 0) + 1;
+        var repeated = visits[k] > 1;
+        clsMap[node.id] = 'active';
+
+        if (k <= 1) {
+          push(st, [1], '进入 fib(' + k + ')：命中基线条件，fib(' + k + ') = ' + k +
+            (repeated ? '（⚠ 这是第 ' + visits[k] + ' 次计算 fib(' + k + ')！朴素递归没有记忆化，重复计算了）' : ''),
+            snap(node.id, clsMap, 'fib(' + k + ') = ' + k));
+          memo[k] = k;
+          clsMap[node.id] = 'done';
+          push(st, [1], '写入 memo[' + k + '] = ' + k, snap(node.id, clsMap, ''));
+          return k;
+        }
+
+        push(st, [0], '进入 fib(' + k + ')' +
+          (repeated ? '：⚠ 这是第 ' + visits[k] + ' 次计算 fib(' + k + ')，朴素递归会把整棵子树重算一遍！' : ''),
+          snap(node.id, clsMap, '调用 fib(' + k + ')'));
+
+        var a = walk(node.left);
+        clsMap[node.id] = 'active';
+        var b = walk(node.right);
+        clsMap[node.id] = 'active';
+
+        memo[k] = a + b;
+        clsMap[node.id] = 'done';
+        push(st, [2], '合并结果：fib(' + k + ') = fib(' + (k - 1) + ') + fib(' + (k - 2) + ') = ' + a + ' + ' + b + ' = ' + (a + b),
+          snap(node.id, clsMap, 'fib(' + k + ') = ' + (a + b)));
+        return a + b;
+      }
+      var result = walk(tree);
+
+      var totalCalls = 0;
+      for (var key in visits) { if (visits.hasOwnProperty(key)) { totalCalls += visits[key]; } }
+      var distinct = 0;
+      for (var key2 in visits) { if (visits.hasOwnProperty(key2)) { distinct++; } }
+      push(st, [], '递归结束：fib(' + n + ') = ' + result + '。共触发 ' + totalCalls + ' 次函数调用，而不同的子问题只有 ' + distinct +
+        ' 个——这就是朴素递归 O(2^n) 的根源；如果每个 f(k) 只算一次（记忆化），只要 ' + distinct + ' 次，即 O(n)',
+        snap(null, clsMap, '完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 280, '斐波那契（递归）：输入 n（2-6）后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 24, '斐波那契朴素递归：f(n) = f(n-1) + f(n-2)，基线 f(0)=0, f(1)=1', 'vt'));
+      kr.html('__t2', S.text(500, 48, '金色 = 当前调用 · 灰色 = 重复子问题（第 2 次及以后进入）· 绿色 = 已算出值', 'vs'));
+
+      DSV.drawTree(kr, s.tree, {
+        top: 80, dy: 64, dx: 40,
+        node: function (nd) {
+          var cls = (s.clsMap && s.clsMap[nd.id]) || '';
+          if (cls === '' && s.visits && s.visits[nd.k] > 1) { cls = 'dead'; }
+          var v = s.memo[nd.k];
+          return {
+            inner: S.circle(0, 0, 19) + S.text(0, -3, 'f(' + nd.k + ')') + S.text(0, 14, v == null ? '?' : String(v), 'tag'),
+            cls: cls
+          };
+        },
+        edge: function (pa, ch) { return 'tree'; }
+      });
+
+      var y0 = 500;
+      kr.html('__mh', S.text(500, y0 - 22, '记忆化表 memo（若加记忆化，每个子问题只算一次，O(n)）', 'vs'));
+      var cw = 58, x0 = (1000 - (s.n + 1) * cw) / 2;
+      for (var i = 0; i <= s.n; i++) {
+        var v = s.memo[i];
+        kr.g('m' + i, 'translate(' + (x0 + i * cw + cw / 2) + ',' + y0 + ')', 'k',
+          '<rect class="cell ' + (v == null ? '' : 'done') + '" x="' + (-cw / 2 + 2) + '" y="-16" width="' + (cw - 4) + '" height="32" rx="4"/>' +
+          S.text(0, 0, v == null ? '?' : v, 'cell-txt') +
+          S.text(0, 26, 'f(' + i + ')', 'idx-txt'));
+      }
+      if (s.msg) { kr.html('__m', S.text(500, 600, s.msg, 'vs')); }
+      kr.end();
+    }
+  });
+
 })();

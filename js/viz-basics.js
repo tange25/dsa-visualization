@@ -782,4 +782,803 @@
     }
   });
 
+  /* ============================================================
+     5. 单链表（状态式）
+     ============================================================ */
+  var ACT_RUN = [{ key: 'run', label: '开始演示', primary: true }];
+
+  /** 双向链表渲染：节点方框 + next（上箭头）/prev（下箭头）双向连线 */
+  function drawDLL(kr, nodes, c, cy) {
+    var n = nodes.length, bw = 86, gap = 50, pitch = bw + gap;
+    var total = n > 0 ? (n * bw + (n - 1) * gap) : 0;
+    var x0 = (1000 - total) / 2, i;
+    var cxs = [];
+    for (i = 0; i < n; i++) { cxs.push(x0 + i * pitch + bw / 2); }
+    for (i = 0; i < n - 1; i++) {
+      var sx = cxs[i] + bw / 2 + 2, ex = cxs[i + 1] - bw / 2 - 10;
+      kr.html('f' + i, arrow(sx, cy - 8, ex, cy - 8, '', C_EDGE) + S.text((sx + ex) / 2, cy - 22, 'next', 'tag'));
+      kr.html('b' + i, arrow(ex, cy + 12, sx, cy + 12, '', C_EDGE) + S.text((sx + ex) / 2, cy + 28, 'prev', 'tag'));
+    }
+    if (n > 0) {
+      kr.html('enull', arrow(cxs[0] - bw / 2 - 2, cy, cxs[0] - bw / 2 - 22, cy, '', C_EDGE) +
+        S.text(cxs[0] - bw / 2 - 30, cy + 4, 'null', 'tag'));
+      kr.html('dnull', arrow(cxs[n - 1] + bw / 2 + 2, cy, cxs[n - 1] + bw / 2 + 22, cy, '', C_EDGE) +
+        S.text(cxs[n - 1] + bw / 2 + 30, cy + 4, 'null', 'tag'));
+    }
+    for (i = 0; i < n; i++) {
+      kr.g('n' + nodes[i].id, 'translate(' + cxs[i] + ',' + cy + ')', 'k',
+        nodeBox(nodes[i].v, c[i] || '', nodes[i].id, bw));
+    }
+    return { cxs: cxs, bw: bw, n: n, cy: cy };
+  }
+
+  DSV.register({
+    id: 'bas-sll', name: '单链表', category: '基础结构',
+    desc: '用一组不连续的节点存储元素，每个节点除数据外还有一个 next 指针指向后继，末尾节点 next 为 null。按值查找 O(n)、尾插 O(1)（有尾指针时）、删除 O(n)，空间 O(n)，但不需要连续内存。',
+    code: [
+      'build(list):',                              // 0
+      '  head = null; tail = null',                 // 1
+      '  for x in list: append(x)',                // 2
+      '',                                          // 3
+      'append(x):',                                // 4
+      '  N = new Node(x)',                         // 5
+      '  if tail: tail.next = N',                  // 6
+      '  tail = N; if !head: head = N',            // 7
+      '',                                          // 8
+      'traverse():',                               // 9
+      '  p = head; while p: visit(p); p = p.next',  // 10
+      '',                                          // 11
+      'delete(v):',                                // 12
+      '  从 head 找第一个值为 v 的节点并摘除'        // 13
+    ],
+    inputs: [IN_SEQ],
+    actions: [
+      { key: 'build', label: '按初始序列建表', primary: true },
+      { key: 'traverse', label: '遍历' },
+      { key: 'append', label: '尾插', arg: { label: '值', def: '9' } },
+      { key: 'delete', label: '按值删除', arg: { label: '值', def: '3' } },
+      { key: 'clear', label: '清空链表' }
+    ],
+    samples: [
+      { label: '示例：数字序列', values: { init: '3,1,4,1,5' } },
+      { label: '示例：字母序列', values: { init: 'a,b,c,d' } }
+    ],
+    random: function () { return { init: DSV.randArr(DSV.ri(3, 5), 1, 99).join(',') }; },
+    run: function (v, action, st) {
+      var MAX = 8, a = (action && action.key) || 'build';
+      if (!st || !st.nodes) { st = { nodes: [], seq: 0 }; }
+      var steps = [];
+      function sn(hi, hicls, pend, msg, warn, sub) {
+        var c = zeros(st.nodes.length), i;
+        for (i = 0; i < c.length; i++) { c[i] = (hi === i) ? (hicls || 'active') : 'done'; }
+        return {
+          nodes: st.nodes.map(function (nd) { return { id: nd.id, v: nd.v }; }),
+          c: c, pend: pend || null, msg: msg || '', warn: !!warn, sub: sub || ''
+        };
+      }
+
+      if (a === 'clear') {
+        push(steps, [0], '清空链表：head 与 tail 都置 null，' + st.nodes.length + ' 个节点全部释放',
+          sn(-1, '', null, '准备清空', false, '节点数 ' + st.nodes.length));
+        st.nodes = [];
+        push(steps, [0], '清空完成：链表为空', sn(-1, '', null, '已清空', false, '节点数 0'));
+        return { steps: steps, state: st };
+      }
+
+      if (a === 'build') {
+        var list = seq(v);
+        st.nodes = [];
+        if (!list.length) {
+          push(steps, [0], '初始序列为空，无法建表，请在「初始序列」中输入元素', sn(-1, '', null, '初始序列为空', true, '节点数 0'));
+          return { steps: steps, state: st };
+        }
+        push(steps, [0, 1], '建表：head = tail = null，然后按初始序列 [' + list.join(', ') + '] 依次尾插',
+          sn(-1, '', null, '开始建表', false, '节点数 0'));
+        for (var t = 0; t < list.length; t++) {
+          if (st.nodes.length >= MAX) {
+            push(steps, [4], '演示上限：最多展示 ' + MAX + ' 个节点，' + list[t] + ' 不再插入',
+              sn(-1, '', null, '已达演示上限 ' + MAX + ' 个节点', true, '节点数 ' + st.nodes.length));
+            break;
+          }
+          var nid = ++st.seq;
+          st.nodes.push({ id: nid, v: list[t] });
+          push(steps, [5, 6, 7], '尾插第 ' + (t + 1) + ' 个元素 ' + list[t] + '：创建 N' + nid +
+            '，原尾结点 next 指向它，tail 移到 N' + nid,
+            sn(st.nodes.length - 1, 'active', null, '尾插 ' + list[t], false, '节点数 ' + st.nodes.length));
+        }
+        push(steps, [7], '建表完成：共 ' + st.nodes.length + ' 个节点，head → N' +
+          (st.nodes.length ? st.nodes[0].id : 'null'), sn(0, 'done', null, '建表完成', false, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+
+      if (a === 'traverse') {
+        push(steps, [9], '开始遍历：p = head，逐个访问节点直到 p == null',
+          sn(0, 'active', null, '准备遍历', false, '节点数 ' + st.nodes.length));
+        if (!st.nodes.length) {
+          push(steps, [10], 'head == null，链表为空，遍历直接结束', sn(-1, '', null, '空链表', false, '节点数 0'));
+          return { steps: steps, state: st };
+        }
+        for (var i = 0; i < st.nodes.length; i++) {
+          push(steps, [10], '访问第 ' + (i + 1) + ' 个节点：N' + st.nodes[i].id + '.val = ' + st.nodes[i].v +
+            (i < st.nodes.length - 1 ? '，p = p.next 继续' : '，p == null，遍历结束'),
+            sn(i, 'active', null, '访问 N' + st.nodes[i].id, false, '节点数 ' + st.nodes.length));
+        }
+        push(steps, [10], '遍历完成：共访问 ' + st.nodes.length + ' 个节点',
+          sn(-1, '', null, '遍历完成', false, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+
+      if (a === 'append') {
+        var x = (action && action.arg != null) ? String(action.arg).trim() : '';
+        if (x === '') { x = autoVal(); }
+        if (st.nodes.length >= MAX) {
+          push(steps, [4], '演示上限：最多 ' + MAX + ' 个节点，请先删除再插入',
+            sn(-1, '', null, '已达演示上限', true, '节点数 ' + st.nodes.length));
+          return { steps: steps, state: st };
+        }
+        var id = ++st.seq;
+        push(steps, [5], '创建新节点 N' + id + '（值 = ' + x + '）',
+          sn(-1, '', { id: id, v: x }, '新建 N' + id, false, '节点数 ' + st.nodes.length));
+        if (!st.nodes.length) {
+          push(steps, [7], '链表为空：head 与 tail 同时指向 N' + id,
+            sn(-1, '', { id: id, v: x }, '空表：head = tail = N' + id, false, '节点数 0'));
+          st.nodes.push({ id: id, v: x });
+          push(steps, [7], 'N' + id + ' 成为唯一节点，next = null',
+            sn(0, 'active', null, '尾插成功', false, '节点数 1'));
+        } else {
+          var lastId = 'N' + st.nodes[st.nodes.length - 1].id;
+          push(steps, [6], '把原尾结点 ' + lastId + ' 的 next 指向新节点 N' + id,
+            sn(st.nodes.length - 1, 'compare', { id: id, v: x }, '连接 next', false, '节点数 ' + st.nodes.length));
+          st.nodes.push({ id: id, v: x });
+          push(steps, [7], 'tail 指针改指向 N' + id + '，它成为新的尾结点',
+            sn(st.nodes.length - 1, 'active', null, 'tail → N' + id, false, '节点数 ' + st.nodes.length));
+        }
+        push(steps, [7], '尾插完成：链表共 ' + st.nodes.length + ' 个节点',
+          sn(st.nodes.length - 1, 'done', null, '尾插成功', false, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+
+      /* delete */
+      var dv = (action && action.arg != null) ? String(action.arg).trim() : '';
+      if (dv === '') { dv = autoVal(); }
+      push(steps, [12], '按值删除：从 head 开始找第一个值为 ' + dv + ' 的节点',
+        sn(0, 'active', null, '准备删除 ' + dv, false, '节点数 ' + st.nodes.length));
+      if (!st.nodes.length) {
+        push(steps, [13], '链表为空，没有节点可删', sn(-1, '', null, '空链表', true, '节点数 0'));
+        return { steps: steps, state: st };
+      }
+      var found = -1;
+      for (var j = 0; j < st.nodes.length; j++) {
+        if (String(st.nodes[j].v) === dv) { found = j; break; }
+      }
+      if (found < 0) {
+        push(steps, [13], '遍历完整条链表都没找到值为 ' + dv + ' 的节点，删除失败',
+          sn(-1, '', null, '未找到 ' + dv, true, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+      var delNode = st.nodes[found];
+      push(steps, [13], '找到目标：N' + delNode.id + '（值 ' + dv + '）在位置 ' + (found + 1) +
+        '，摘除它并把前后节点的指针连上',
+        sn(found, 'swap', null, '摘除 N' + delNode.id, false, '节点数 ' + st.nodes.length));
+      st.nodes.splice(found, 1);
+      push(steps, [13], '删除完成：N' + delNode.id + ' 已从链上移除，剩余 ' + st.nodes.length + ' 个节点',
+        sn(Math.max(0, found - 1), 'done', null, '已删除 ' + dv, false, '节点数 ' + st.nodes.length));
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 260, '单链表：点击「按初始序列建表」开始演示', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 28, '单链表：head 指向第一个节点，每个节点 next 指向下一个，末尾 next = null', 'vt'));
+      kr.html('__t2', S.text(500, 52, '当前节点数 size = ' + (s.nodes || []).length + '（演示上限 8 个）', 'vs'));
+      var L = drawList(kr, s, { cy: 300 });
+      drawPend(kr, s.pend, 150, 168, '新节点（尚未接入）');
+      if (L.n > 0) {
+        kr.g('__ph', 'translate(' + L.cxs[0] + ',0)', 'k',
+          arrow(0, 210, 0, 274, 'hl', C_HL) + S.text(0, 196, 'head', 'ptr'));
+      } else {
+        kr.html('__ph', S.text(500, 300, 'head → null（空链表）', 'ptr'));
+      }
+      if (s.msg) { kr.html('__m', S.text(500, 420, s.msg, s.warn ? 'vwarn' : 'vs')); }
+      if (s.sub) { kr.html('__s', S.text(500, 448, s.sub, 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     6. 双向链表（状态式）
+     ============================================================ */
+  DSV.register({
+    id: 'bas-dll', name: '双向链表', category: '基础结构',
+    desc: '每个节点除数据外有 prev（前驱）和 next（后继）两个指针，首尾节点的外侧指针指向 null。可以从两端遍历；插入、删除在已知位置时 O(1)，按值查找 O(n)。空间比单链表多一个指针。',
+    code: [
+      'build(list):',                              // 0
+      '  head = tail = null',                      // 1
+      '  for x in list: append(x)',                // 2
+      '',                                         // 3
+      'append(x):',                               // 4
+      '  N = new Node(x)',                         // 5
+      '  N.prev = tail',                           // 6
+      '  if tail: tail.next = N',                 // 7
+      '  tail = N; if !head: head = N',           // 8
+      '',                                         // 9
+      'delete(v):',                               // 10
+      '  找到值为 v 的节点 p',                     // 11
+      '  p.prev.next = p.next',                    // 12
+      '  p.next.prev = p.prev'                     // 13
+    ],
+    inputs: [IN_SEQ],
+    actions: [
+      { key: 'build', label: '按初始序列建表', primary: true },
+      { key: 'append', label: '尾插', arg: { label: '值', def: '9' } },
+      { key: 'delete', label: '按值删除', arg: { label: '值', def: '3' } },
+      { key: 'clear', label: '清空链表' }
+    ],
+    samples: [
+      { label: '示例：数字序列', values: { init: '3,1,4,1,5' } },
+      { label: '示例：字母序列', values: { init: 'a,b,c,d' } }
+    ],
+    random: function () { return { init: DSV.randArr(DSV.ri(3, 5), 1, 99).join(',') }; },
+    run: function (v, action, st) {
+      var MAX = 8, a = (action && action.key) || 'build';
+      if (!st || !st.nodes) { st = { nodes: [], seq: 0 }; }
+      var steps = [];
+      function sn(hi, hicls, msg, warn, sub) {
+        var c = zeros(st.nodes.length), i;
+        for (i = 0; i < c.length; i++) { c[i] = (hi === i) ? (hicls || 'active') : 'done'; }
+        return {
+          nodes: st.nodes.map(function (nd) { return { id: nd.id, v: nd.v }; }),
+          c: c, msg: msg || '', warn: !!warn, sub: sub || ''
+        };
+      }
+
+      if (a === 'clear') {
+        push(steps, [0], '清空双向链表：head 与 tail 置 null，' + st.nodes.length + ' 个节点全部释放',
+          sn(-1, '', '准备清空', false, '节点数 ' + st.nodes.length));
+        st.nodes = [];
+        push(steps, [0], '清空完成：链表为空', sn(-1, '', '已清空', false, '节点数 0'));
+        return { steps: steps, state: st };
+      }
+
+      if (a === 'build') {
+        var list = seq(v);
+        st.nodes = [];
+        if (!list.length) {
+          push(steps, [0], '初始序列为空，无法建表', sn(-1, '', '初始序列为空', true, '节点数 0'));
+          return { steps: steps, state: st };
+        }
+        push(steps, [0, 1], '建表：head = tail = null，按 [' + list.join(', ') + '] 依次尾插',
+          sn(-1, '', '开始建表', false, '节点数 0'));
+        for (var t = 0; t < list.length; t++) {
+          if (st.nodes.length >= MAX) {
+            push(steps, [4], '演示上限：最多 ' + MAX + ' 个节点', sn(-1, '', '已达上限', true, '节点数 ' + st.nodes.length));
+            break;
+          }
+          var nid = ++st.seq;
+          st.nodes.push({ id: nid, v: list[t] });
+          push(steps, [5, 6, 7, 8], '尾插 ' + list[t] + '：N' + nid + '.prev 指向原尾结点，原尾结点.next 指向 N' + nid +
+            '，tail 移到 N' + nid, sn(st.nodes.length - 1, 'active', '尾插 ' + list[t], false, '节点数 ' + st.nodes.length));
+        }
+        push(steps, [8], '建表完成：共 ' + st.nodes.length + ' 个节点', sn(0, 'done', '建表完成', false, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+
+      if (a === 'append') {
+        var x = (action && action.arg != null) ? String(action.arg).trim() : '';
+        if (x === '') { x = autoVal(); }
+        if (st.nodes.length >= MAX) {
+          push(steps, [4], '演示上限：最多 ' + MAX + ' 个节点', sn(-1, '', '已达上限', true, '节点数 ' + st.nodes.length));
+          return { steps: steps, state: st };
+        }
+        var id = ++st.seq;
+        push(steps, [5], '创建新节点 N' + id + '（值 = ' + x + '）',
+          sn(-1, '', '新建 N' + id, false, '节点数 ' + st.nodes.length));
+        if (!st.nodes.length) {
+          push(steps, [8], '链表为空：head = tail = N' + id, sn(-1, '', '空表', false, '节点数 0'));
+          st.nodes.push({ id: id, v: x });
+        } else {
+          push(steps, [6, 7], 'N' + id + '.prev 指向原尾结点，原尾结点.next 指向 N' + id,
+            sn(st.nodes.length - 1, 'compare', '连接双向指针', false, '节点数 ' + st.nodes.length));
+          st.nodes.push({ id: id, v: x });
+        }
+        push(steps, [8], 'tail 移到 N' + id + '，尾插完成',
+          sn(st.nodes.length - 1, 'done', '尾插成功', false, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+
+      /* delete */
+      var dv = (action && action.arg != null) ? String(action.arg).trim() : '';
+      if (dv === '') { dv = autoVal(); }
+      push(steps, [10], '按值删除：找第一个值为 ' + dv + ' 的节点',
+        sn(0, 'active', '准备删除 ' + dv, false, '节点数 ' + st.nodes.length));
+      if (!st.nodes.length) {
+        push(steps, [11], '链表为空', sn(-1, '', '空链表', true, '节点数 0'));
+        return { steps: steps, state: st };
+      }
+      var found = -1;
+      for (var j = 0; j < st.nodes.length; j++) {
+        if (String(st.nodes[j].v) === dv) { found = j; break; }
+      }
+      if (found < 0) {
+        push(steps, [11], '未找到值为 ' + dv + ' 的节点', sn(-1, '', '未找到', true, '节点数 ' + st.nodes.length));
+        return { steps: steps, state: st };
+      }
+      var delNode = st.nodes[found];
+      push(steps, [11, 12, 13], '找到 N' + delNode.id + '（值 ' + dv + '）在位置 ' + (found + 1) +
+        '：把它的前驱.next 接到后继、后继.prev 接到前驱，绕过 N' + delNode.id,
+        sn(found, 'swap', '摘除 N' + delNode.id, false, '节点数 ' + st.nodes.length));
+      st.nodes.splice(found, 1);
+      push(steps, [13], '删除完成：剩余 ' + st.nodes.length + ' 个节点',
+        sn(Math.max(0, found - 1), 'done', '已删除 ' + dv, false, '节点数 ' + st.nodes.length));
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 260, '双向链表：点击「按初始序列建表」开始演示', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 28, '双向链表：每个节点有 prev（下箭头）和 next（上箭头）两个指针', 'vt'));
+      kr.html('__t2', S.text(500, 52, '当前节点数 size = ' + (s.nodes || []).length + '（演示上限 8 个）', 'vs'));
+      var L = drawDLL(kr, s.nodes || [], s.c || [], 300);
+      if (L.n > 0) {
+        kr.g('__ph', 'translate(' + L.cxs[0] + ',0)', 'k',
+          arrow(0, 210, 0, 274, 'hl', C_HL) + S.text(0, 196, 'head', 'ptr'));
+      } else {
+        kr.html('__ph', S.text(500, 300, 'head → null（空链表）', 'ptr'));
+      }
+      if (s.msg) { kr.html('__m', S.text(500, 420, s.msg, s.warn ? 'vwarn' : 'vs')); }
+      if (s.sub) { kr.html('__s', S.text(500, 448, s.sub, 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     7. 中缀表达式转后缀（调度场算法）
+     ============================================================ */
+  DSV.register({
+    id: 'bas-infix-post', name: '中缀转后缀（栈）', category: '基础结构',
+    desc: 'Dijkstra 调度场算法：从左到右扫描中缀表达式，操作数直接输出；运算符与栈顶比较优先级，栈顶优先级更高或相等且左结合时弹出输出；遇右括号弹出到左括号。最终后缀表达式只需一个栈即可求值。时间 O(n)，空间 O(n)。',
+    viewBox: '0 0 1000 600',
+    code: [
+      'toPostfix(expr):',                          // 0
+      '  for token in expr:',                      // 1
+      '    if 操作数: 输出 token',                  // 2
+      "    if '(': 压栈",                           // 3
+      "    if ')': 弹出直到 '('",                   // 4
+      '    if 运算符 op:',                          // 5
+      '      while 栈顶优先级 ≥ op: 弹出输出',        // 6
+      '      压入 op',                               // 7
+      '  最后把栈全部弹出输出'                        // 8
+    ],
+    inputs: [{ key: 'expr', label: '中缀表达式', def: 'a+b*c-d', hint: '如 a+b*c 或 (a+b)*c，支持 + - * / ^' }],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：a+b*c-d', values: { expr: 'a+b*c-d' } },
+      { label: '示例：(a+b)*(c-d)', values: { expr: '(a+b)*(c-d)' } },
+      { label: '示例：a^b/c', values: { expr: 'a^b/c' } }
+    ],
+    random: function () {
+      var ops = ['+', '-', '*', '/'], out = ['a'];
+      var n = DSV.ri(3, 5);
+      for (var i = 0; i < n; i++) {
+        out.push(ops[DSV.ri(0, ops.length - 1)]);
+        out.push(String.fromCharCode(97 + DSV.ri(0, 5)));
+      }
+      return { expr: out.join('') };
+    },
+    run: function (v) {
+      var expr = String(v.expr == null ? '' : v.expr).replace(/\s+/g, '');
+      var st = [];
+      if (!expr) {
+        return [{ code: [0], desc: '表达式为空，请输入中缀表达式，如 a+b*c',
+          snap: { tokens: [], tcls: [], pos: -1, opStack: [], output: [], msg: '空输入', warn: true } }];
+      }
+      var tokens = [], i;
+      for (i = 0; i < expr.length; i++) {
+        var ch = expr[i];
+        if (/[a-zA-Z0-9]/.test(ch)) { tokens.push({ t: ch, k: 'opd' }); }
+        else if ('+-*/^()'.indexOf(ch) >= 0) { tokens.push({ t: ch, k: ch }); }
+      }
+      function prec(op) { return op === '^' ? 4 : (op === '*' || op === '/' ? 3 : (op === '+' || op === '-' ? 2 : 0)); }
+      function leftAssoc(op) { return op !== '^'; }
+
+      var opStack = [], output = [], tcls = [];
+      for (i = 0; i < tokens.length; i++) { tcls.push(''); }
+
+      function snap(pos, msg, warn) {
+        return {
+          tokens: tokens.map(function (tk) { return tk.t; }),
+          tcls: tcls.slice(), pos: pos,
+          opStack: opStack.slice(), output: output.slice(),
+          msg: msg || '', warn: !!warn
+        };
+      }
+
+      push(st, [0], '开始扫描中缀表达式：' + expr + '，共 ' + tokens.length + ' 个 token。操作数直接输出，运算符压栈',
+        snap(-1, '初始化'));
+
+      for (i = 0; i < tokens.length; i++) {
+        var tk = tokens[i];
+        tcls = tcls.slice(); tcls[i] = 'active';
+
+        if (tk.k === 'opd') {
+          output.push(tk.t);
+          push(st, [2], 'token "' + tk.t + '" 是操作数，直接加入输出队列 → [' + output.join(' ') + ']',
+            snap(i, '输出 ' + tk.t));
+        } else if (tk.t === '(') {
+          opStack.push(tk.t);
+          push(st, [3], 'token "(" 左括号，直接压入运算符栈', snap(i, '压入 ('));
+        } else if (tk.t === ')') {
+          var popped = [];
+          while (opStack.length && opStack[opStack.length - 1] !== '(') {
+            popped.push(opStack.pop());
+            output.push(popped[popped.length - 1]);
+          }
+          if (opStack.length) { opStack.pop(); }
+          push(st, [4], 'token ")"：弹出栈顶运算符到输出直到遇到 "("，弹出：' + popped.join(' ') +
+            '；左括号 "(" 丢弃不输出', snap(i, '处理 )'));
+        } else {
+          var op = tk.t;
+          push(st, [5], 'token "' + op + '" 是运算符（优先级 ' + prec(op) + '），与栈顶比较',
+            snap(i, '处理运算符 ' + op));
+          var pops = [];
+          while (opStack.length) {
+            var top = opStack[opStack.length - 1];
+            if (top === '(') { break; }
+            if (prec(top) > prec(op) || (prec(top) === prec(op) && leftAssoc(op))) {
+              pops.push(opStack.pop());
+              output.push(pops[pops.length - 1]);
+            } else { break; }
+          }
+          if (pops.length) {
+            push(st, [6], '栈顶 ' + pops.join(' ') + ' 优先级 ≥ ' + op + '，依次弹出到输出队列',
+              snap(i, '弹出 ' + pops.join(' ')));
+          } else {
+            push(st, [6], '栈顶为空或优先级低于 ' + op + '，无需弹出', snap(i, ''));
+          }
+          opStack.push(op);
+          push(st, [7], '把运算符 ' + op + ' 压栈', snap(i, '压入 ' + op));
+        }
+        tcls[i] = '';
+      }
+
+      if (opStack.length) {
+        var rest = opStack.slice();
+        push(st, [8], '扫描完毕，把运算符栈中剩余的 ' + rest.join(' ') + ' 全部弹出到输出',
+          snap(tokens.length, '收尾'));
+        while (opStack.length) { output.push(opStack.pop()); }
+      }
+      push(st, [8], '转换完成：后缀表达式 = ' + output.join(' ') +
+        '（求值时从左到右，遇到运算符就取栈顶两个数运算，O(n)）',
+        snap(tokens.length, '完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 280, '中缀转后缀：输入中缀表达式后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '中缀转后缀（调度场算法）：操作数直出，运算符比较优先级后压栈', 'vt'));
+      kr.html('__t2', S.text(500, 50, '金色 = 当前扫描的 token；运算符栈在中部，输出队列在下方', 'vs'));
+
+      var cw = 44, gap = 8, n = s.tokens.length, i;
+      var total = n * cw + Math.max(0, n - 1) * gap, x0 = (1000 - total) / 2;
+      for (i = 0; i < n; i++) {
+        kr.g('tk' + i, 'translate(' + (x0 + i * (cw + gap) + cw / 2) + ',130)', 'k',
+          '<rect class="cell ' + (s.tcls[i] || '') + '" x="' + (-cw / 2 + 2) + '" y="-18" width="' + (cw - 4) + '" height="36" rx="4"/>' +
+          S.text(0, 0, s.tokens[i], 'cell-txt') +
+          (i === s.pos ? S.text(0, 34, '▲', 'ptr') : ''));
+      }
+
+      kr.html('__sh', S.text(250, 220, '运算符栈（栈顶在下）', 'vs'));
+      var stk = s.opStack || [];
+      for (i = 0; i < stk.length; i++) {
+        var isTop = (i === stk.length - 1);
+        kr.g('sk' + i, 'translate(250,' + (250 + i * 42) + ')', 'k',
+          '<rect class="cell ' + (isTop ? 'active' : '') + '" x="-22" y="-18" width="44" height="36" rx="4"/>' +
+          S.text(0, 0, stk[i], 'cell-txt'));
+      }
+      if (!stk.length) { kr.html('__se', S.text(250, 260, '（空栈）', 'vs')); }
+
+      kr.html('__oh', S.text(500, 430, '输出队列（后缀表达式）', 'vs'));
+      var out = s.output || [];
+      var ocw = 44, ototal = out.length * ocw + Math.max(0, out.length - 1) * gap, ox0 = (1000 - ototal) / 2;
+      for (i = 0; i < out.length; i++) {
+        kr.g('ot' + i, 'translate(' + (ox0 + i * (ocw + gap) + ocw / 2) + ',470)', 'k',
+          '<rect class="cell done" x="' + (-ocw / 2 + 2) + '" y="-18" width="' + (ocw - 4) + '" height="36" rx="4"/>' +
+          S.text(0, 0, out[i], 'cell-txt'));
+      }
+      if (!out.length) { kr.html('__oe', S.text(500, 470, '（空）', 'vs')); }
+
+      if (s.msg) { kr.html('__m', S.text(500, 550, s.msg, s.warn ? 'vwarn' : 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     8. 单调栈（下一个更大元素）
+     ============================================================ */
+  DSV.register({
+    id: 'bas-mono-stack', name: '单调栈（下一个更大元素）', category: '基础结构',
+    desc: '求数组中每个元素右边第一个比它大的元素（NGE）：从左到右扫描，栈里保存尚未找到答案的下标，且栈内对应值自底向上严格递增。当前元素比栈顶大时栈顶找到答案就弹出。每个元素入栈、出栈各一次，时间 O(n)，空间 O(n)。',
+    viewBox: '0 0 1000 620',
+    code: [
+      'nge(A):',                                   // 0
+      '  stack = []  // 存下标，对应值单调递增',      // 1
+      '  for i = 0 to n-1:',                        // 2
+      '    while stack 非空 且 A[栈顶] < A[i]:',    // 3
+      '      j = stack.pop(); result[j] = A[i]',    // 4
+      '    stack.push(i)',                          // 5
+      '  剩余栈中元素 result = -1',                  // 6
+      '  return result'                             // 7
+    ],
+    inputs: [{ key: 'arr', label: '数组', def: '2,1,2,4,3', hint: '逗号分隔数字' }],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：2,1,2,4,3', values: { arr: '2,1,2,4,3' } },
+      { label: '示例：递减（答案全 -1）', values: { arr: '5,4,3,2,1' } },
+      { label: '示例：1,3,2,4,5', values: { arr: '1,3,2,4,5' } }
+    ],
+    random: function () { return { arr: DSV.randArr(DSV.ri(5, 8), 1, 9).join(',') }; },
+    run: function (v) {
+      var a = DSV.nums(v.arr, 12), n = a.length;
+      var st = [];
+      if (n < 1) {
+        return [{ code: [0], desc: '数组为空',
+          snap: { a: [], c: [], stack: [], result: [], msg: '空输入', warn: true } }];
+      }
+      var stack = [], result = [], c = zeros(n), i;
+      for (i = 0; i < n; i++) { result.push(null); }
+
+      function snap(msg, warn) {
+        return {
+          a: a.slice(), c: c.slice(),
+          stack: stack.slice(), result: result.slice(),
+          msg: msg || '', warn: !!warn
+        };
+      }
+
+      push(st, [0, 1], '开始求下一个更大元素：A = [' + a.join(', ') + ']，栈空，result 全部为 null',
+        snap('初始化'));
+
+      for (i = 0; i < n; i++) {
+        c = zeros(n); c[i] = 'active';
+        push(st, [2], 'i = ' + i + '，A[i] = ' + a[i] + '，与栈顶比较',
+          snap('扫描 A[' + i + ']=' + a[i]));
+
+        var poppedAny = false;
+        while (stack.length && a[stack[stack.length - 1]] < a[i]) {
+          var j = stack.pop();
+          result[j] = a[i];
+          poppedAny = true;
+          push(st, [3, 4], '栈顶 A[' + j + '] = ' + a[j] + ' < A[' + i + '] = ' + a[i] +
+            '，弹出 j=' + j + '，result[' + j + '] = ' + a[i] + '（右边第一个更大元素找到了）',
+            snap('弹出 j=' + j));
+        }
+        if (!poppedAny) {
+          push(st, [3], stack.length ?
+            '栈顶 A[' + stack[stack.length - 1] + '] = ' + a[stack[stack.length - 1]] +
+            ' ≥ A[' + i + ']=' + a[i] + '，不弹出' : '栈为空，直接入栈', snap('比较'));
+        }
+
+        stack.push(i);
+        c = zeros(n);
+        for (var t = 0; t < stack.length; t++) { c[stack[t]] = 'compare'; }
+        c[i] = 'active';
+        push(st, [5], '把下标 i=' + i + ' 压栈。栈内对应值自底向上严格递增：' +
+          stack.map(function (x) { return 'A[' + x + ']=' + a[x]; }).join(' < '),
+          snap('压入 i=' + i));
+      }
+
+      for (i = 0; i < stack.length; i++) { result[stack[i]] = -1; }
+      c = zeros(n);
+      for (i = 0; i < n; i++) { c[i] = 'done'; }
+      push(st, [6, 7], '扫描结束，栈里剩余的 ' + stack.length + ' 个元素（' +
+        stack.map(function (x) { return 'A[' + x + ']=' + a[x]; }).join(', ') +
+        '）右边没有更大元素，result 置 -1。最终 result = [' + result.join(', ') + ']',
+        snap('完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 280, '单调栈：输入数组后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '单调栈：求每个元素右边第一个更大元素（NGE）', 'vt'));
+      kr.html('__t2', S.text(500, 50, '金色 = 当前扫描的 i · 蓝色 = 在栈中等待答案 · 红色 = 刚找到答案被弹出', 'vs'));
+
+      var a = s.a, n = a.length, i;
+      var lay = DSV.barLayout(n, { baseY: 260, topY: 90, cw: 44 });
+      var max = 1;
+      for (i = 0; i < n; i++) { if (Math.abs(a[i]) > max) { max = Math.abs(a[i]); } }
+      var maxH = 260 - 90 - 30;
+      for (i = 0; i < n; i++) {
+        var h = 22 + (Math.abs(a[i]) / max) * maxH;
+        kr.g('b' + i, 'translate(' + lay[i].cx + ',260)', 'k',
+          '<rect class="bar ' + (s.c[i] || '') + '" x="' + (-lay[i].w / 2) + '" y="' + (-h) +
+          '" width="' + lay[i].w + '" height="' + h + '" rx="3"/>' +
+          S.text(0, -h - 12, a[i], 'bar-val') + S.text(0, 18, i, 'idx-txt'));
+      }
+
+      kr.html('__sh', S.text(200, 330, '栈（存下标，对应值单调递增）', 'vs'));
+      var stk = s.stack || [];
+      for (i = 0; i < stk.length; i++) {
+        var isTop = (i === stk.length - 1);
+        kr.g('sk' + i, 'translate(200,' + (360 + i * 40) + ')', 'k',
+          '<rect class="cell ' + (isTop ? 'active' : 'compare') + '" x="-42" y="-16" width="84" height="32" rx="4"/>' +
+          S.text(0, 0, 'A[' + stk[i] + ']=' + a[stk[i]], 'cell-txt'));
+      }
+      if (!stk.length) { kr.html('__se', S.text(200, 380, '（空栈）', 'vs')); }
+
+      kr.html('__rh', S.text(650, 330, 'result[i]：右边第一个更大元素', 'vs'));
+      var res = s.result || [];
+      var rcw = 56, rx0 = (1000 - res.length * rcw) / 2;
+      for (i = 0; i < res.length; i++) {
+        kr.g('r' + i, 'translate(' + (rx0 + i * rcw + rcw / 2) + ',380)', 'k',
+          '<rect class="cell ' + (res[i] == null ? '' : 'done') + '" x="' + (-rcw / 2 + 2) + '" y="-16" width="' + (rcw - 4) + '" height="32" rx="4"/>' +
+          S.text(0, 0, res[i] == null ? '?' : res[i], 'cell-txt') +
+          S.text(0, 26, 'i=' + i, 'idx-txt'));
+      }
+
+      if (s.msg) { kr.html('__m', S.text(500, 560, s.msg, s.warn ? 'vwarn' : 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     9. 滑动窗口最大值（单调队列）
+     ============================================================ */
+  DSV.register({
+    id: 'bas-slip-max', name: '滑动窗口最大值（单调队列）', category: '基础结构',
+    desc: '窗口大小为 k，每次右移一位求窗口内最大值。用单调双端队列存下标：队首是当前窗口最大值，队列内对应值严格递减。新元素入队时从队尾弹出所有更小者，窗口滑出左端时若队首过期则出队。每个元素入队出队各一次，时间 O(n)。',
+    viewBox: '0 0 1000 620',
+    code: [
+      'slidingMax(A, k):',                          // 0
+      '  deque = []  // 存下标，对应值严格递减',     // 1
+      '  for i = 0 to n-1:',                        // 2
+      '    while deque 队尾值 <= A[i]: 弹出队尾',    // 3
+      '    deque.push(i)',                          // 4
+      '    if deque.front <= i-k: 弹出队首(过期)',   // 5
+      '    if i >= k-1: result[i-k+1] = A[deque.front]', // 6
+      '  return result'                             // 7
+    ],
+    inputs: [
+      { key: 'arr', label: '数组', def: '1,3,-1,-3,5,3,6,7', hint: '逗号分隔数字' },
+      { key: 'k', label: '窗口大小 k', def: '3', hint: '2-6' }
+    ],
+    actions: ACT_RUN,
+    samples: [
+      { label: '示例：经典 k=3', values: { arr: '1,3,-1,-3,5,3,6,7', k: '3' } },
+      { label: '示例：k=4', values: { arr: '4,3,5,4,7,1,2', k: '4' } }
+    ],
+    random: function () {
+      return { arr: DSV.randArr(DSV.ri(7, 10), -5, 20).join(','), k: String(DSV.ri(3, 4)) };
+    },
+    run: function (v) {
+      var a = DSV.nums(v.arr, 15), n = a.length;
+      var k = parseInt(v.k, 10);
+      if (!isFinite(k) || k < 1) { k = 3; }
+      k = Math.min(n, k);
+      var st = [];
+      if (n < 1) {
+        return [{ code: [0], desc: '数组为空',
+          snap: { a: [], c: [], deque: [], result: [], winLo: 0, winHi: -1, i: -1, msg: '空输入', warn: true } }];
+      }
+      var deque = [], result = [], c = zeros(n), i;
+      function snap(msg, warn) {
+        return {
+          a: a.slice(), c: c.slice(),
+          deque: deque.slice(), result: result.slice(),
+          winLo: (i - k + 1), winHi: i, i: i,
+          msg: msg || '', warn: !!warn
+        };
+      }
+      push(st, [0, 1], '开始：A = [' + a.join(', ') + ']，窗口大小 k = ' + k + '，双端队列空，result 空',
+        snap('初始化'));
+
+      for (i = 0; i < n; i++) {
+        c = zeros(n); c[i] = 'active';
+        push(st, [2], 'i = ' + i + '，A[i] = ' + a[i] + '，准备入队',
+          snap('扫描 A[' + i + ']=' + a[i]));
+
+        var poppedTail = [];
+        while (deque.length && a[deque[deque.length - 1]] <= a[i]) {
+          poppedTail.push(deque.pop());
+        }
+        if (poppedTail.length) {
+          push(st, [3], '队尾 ' + poppedTail.map(function (x) { return 'A[' + x + ']=' + a[x]; }).join(', ') +
+            ' ≤ ' + a[i] + '，不可能成为窗口最大值，从队尾弹出', snap('维护单调性'));
+        }
+
+        deque.push(i);
+        c = zeros(n);
+        for (var t = 0; t < deque.length; t++) { c[deque[t]] = 'compare'; }
+        c[i] = 'active';
+        push(st, [4], '把下标 i=' + i + ' 从队尾入队。队列内对应值自队首到队尾严格递减：' +
+          deque.map(function (x) { return 'A[' + x + ']=' + a[x]; }).join(' > '),
+          snap('入队 i=' + i));
+
+        if (deque[0] <= i - k) {
+          var front = deque.shift();
+          c = zeros(n); c[front] = 'dead';
+          push(st, [5], '队首下标 ' + front + ' 已滑出窗口（<= i - k = ' + (i - k) + '），从队首弹出',
+            snap('队首过期'));
+        }
+
+        if (i >= k - 1) {
+          result.push(a[deque[0]]);
+          c = zeros(n);
+          for (var t2 = 0; t2 < deque.length; t2++) { c[deque[t2]] = 'compare'; }
+          c[deque[0]] = 'swap';
+          push(st, [6], '窗口 [' + (i - k + 1) + '…' + i + '] 形成，队首 A[' + deque[0] + ']=' +
+            a[deque[0]] + ' 是最大值 → result[' + (i - k + 1) + '] = ' + a[deque[0]],
+            snap('窗口最大值 = ' + a[deque[0]]));
+        } else {
+          push(st, [6], '窗口还未成形（i < k-1=' + (k - 1) + '），暂不输出', snap('窗口成形中'));
+        }
+      }
+      c = zeros(n);
+      push(st, [7], '完成：共 ' + result.length + ' 个窗口，每个窗口最大值 = [' + result.join(', ') + ']',
+        snap('完成'));
+      return st;
+    },
+    render: function (kr, s) {
+      if (!s) {
+        kr.html('__t', S.text(500, 280, '滑动窗口最大值：输入数组与窗口大小后点击「开始演示」', 'vt'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '滑动窗口最大值：单调双端队列，队首即窗口最大值', 'vt'));
+      kr.html('__t2', S.text(500, 50, '金色 = 当前 i · 蓝色 = 在队列中 · 红色 = 队首（最大值）', 'vs'));
+
+      var a = s.a, n = a.length, i;
+      var lay = DSV.barLayout(n, { baseY: 240, topY: 80, cw: 42 });
+      var max = 1;
+      for (i = 0; i < n; i++) { if (Math.abs(a[i]) > max) { max = Math.abs(a[i]); } }
+      var maxH = 240 - 80 - 30;
+
+      if (s.winHi >= 0 && s.winLo <= s.winHi) {
+        var lx = lay[Math.max(0, s.winLo)].x - 4;
+        var hiIdx = Math.min(n - 1, s.winHi);
+        var rx = lay[hiIdx].x + lay[hiIdx].w + 4;
+        kr.html('__wf', '<rect class="frame dash" x="' + lx + '" y="60" width="' + (rx - lx) +
+          '" height="' + (240 - 60 + 10) + '" rx="6"/>' +
+          S.text((lx + rx) / 2, 50, '当前窗口 [' + s.winLo + '…' + s.winHi + ']', 'vs'));
+      }
+
+      for (i = 0; i < n; i++) {
+        var h = 22 + (Math.abs(a[i]) / max) * maxH;
+        kr.g('b' + i, 'translate(' + lay[i].cx + ',240)', 'k',
+          '<rect class="bar ' + (s.c[i] || '') + '" x="' + (-lay[i].w / 2) + '" y="' + (-h) +
+          '" width="' + lay[i].w + '" height="' + h + '" rx="3"/>' +
+          S.text(0, -h - 12, a[i], 'bar-val') + S.text(0, 18, i, 'idx-txt'));
+      }
+
+      kr.html('__dh', S.text(500, 310, '单调双端队列（队首在左，对应值严格递减）', 'vs'));
+      var dq = s.deque || [];
+      var dcw = 60, dgap = 6, dtotal = dq.length * dcw + Math.max(0, dq.length - 1) * dgap, dx0 = (1000 - dtotal) / 2;
+      for (i = 0; i < dq.length; i++) {
+        var isFront = (i === 0);
+        kr.g('d' + i, 'translate(' + (dx0 + i * (dcw + dgap) + dcw / 2) + ',350)', 'k',
+          '<rect class="cell ' + (isFront ? 'swap' : 'compare') + '" x="' + (-dcw / 2 + 2) + '" y="-16" width="' + (dcw - 4) + '" height="32" rx="4"/>' +
+          S.text(0, 0, 'A[' + dq[i] + ']=' + a[dq[i]], 'cell-txt') +
+          S.text(0, 26, isFront ? '队首(最大)' : '', 'idx-txt'));
+      }
+      if (!dq.length) { kr.html('__de', S.text(500, 350, '（队列空）', 'vs')); }
+
+      kr.html('__rh', S.text(500, 430, 'result（每个窗口的最大值）', 'vs'));
+      var res = s.result || [];
+      var rcw = 56, rtotal = res.length * rcw + Math.max(0, res.length - 1) * 6, rx0 = (1000 - rtotal) / 2;
+      for (i = 0; i < res.length; i++) {
+        kr.g('r' + i, 'translate(' + (rx0 + i * (rcw + 6) + rcw / 2) + ',470)', 'k',
+          '<rect class="cell done" x="' + (-rcw / 2 + 2) + '" y="-16" width="' + (rcw - 4) + '" height="32" rx="4"/>' +
+          S.text(0, 0, res[i], 'cell-txt') +
+          S.text(0, 26, '窗' + (i + 1), 'idx-txt'));
+      }
+
+      if (s.msg) { kr.html('__m', S.text(500, 560, s.msg, s.warn ? 'vwarn' : 'vs')); }
+      kr.end();
+    }
+  });
+
 })();

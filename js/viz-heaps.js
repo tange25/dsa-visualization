@@ -813,4 +813,142 @@
     }
   });
 
+  /* ============================================================
+     配对堆（Pairing Heap）
+     ============================================================ */
+  var PAIR_CODE = [
+    '// 配对堆：多叉树，根最小；合并时把较大根挂为较小根的第一个孩子',
+    'merge(x, y):',                              // 1
+    '  if !x: return y',
+    '  if !y: return x',
+    '  if x.v > y.v: swap(x, y)   // x 为较小根', // 4
+    '  x.kids.unshift(y)          // y 挂为 x 的第一个孩子',
+    '  return x',
+    '',
+    'insert(x): merge(root, newNode(x))',        // 7
+    '',
+    'deleteMin():',                              // 9
+    '  old = root; kids = old.kids',
+    '  第一遍：相邻两两合并 (0,1)(2,3)...',
+    '  第二遍：从右向左依次合并成一棵',
+    '  root = 合并结果'                          // 13
+  ];
+
+  DSV.register({
+    id: 'pairing-heap', name: '配对堆', category: '堆结构',
+    desc: '配对堆是 n 路堆序树：根最小，合并只需把较大根挂为较小根的第一个孩子。插入、合并、查看最小值均为摊还 O(1)；删除最小值时把根的孩子们先相邻两两配对、再从右向左合并，摊还 O(log n)。实践中常比二叉堆快。',
+    code: PAIR_CODE,
+    viewBox: '0 0 1000 600',
+    inputs: [{ key: 'init', label: '初始序列', def: '10,20,5,30,15,25,8', hint: '逗号分隔数字' }],
+    actions: [
+      { key: 'build', label: '建堆', primary: true },
+      { key: 'insert', label: '插入', arg: { label: '值', def: '3' } },
+      { key: 'deleteMin', label: '删除最小值' },
+      { key: 'findMin', label: '查看最小值' }
+    ],
+    samples: [
+      { label: '示例：随机', values: { init: '10,20,5,30,15,25,8' } },
+      { label: '示例：逆序', values: { init: '9,8,7,6,5,4,3' } }
+    ],
+    random: function () { return { init: DSV.randArr(DSV.ri(6, 9), 1, 99).join(',') }; },
+    run: function (v, action, state) {
+      var st = state || { root: null, next: 1 }, steps = [];
+      function mkP(v) { return { id: 'p' + st.next, v: v, kids: [] }; st.next++; }
+      function merge(x, y) {
+        if (!x) { return y; }
+        if (!y) { return x; }
+        if (x.v > y.v) { var t = x; x = y; y = t; }
+        x.kids.unshift(y);
+        return x;
+      }
+      function snap(roots, hl, title, sub) {
+        return { roots: DSV.clone(roots), hl: DSV.clone(hl || {}), title: title || '配对堆', sub: sub || '' };
+      }
+      function curRoots() { return st.root ? [st.root] : []; }
+
+      if (action.key === 'build') {
+        st = { root: null, next: 1 };
+        var vals = DSV.nums(v.init, 20);
+        if (!vals.length) { return []; }
+        push(steps, [7], '开始建堆：逐个插入 [' + vals.join(', ') + ']，每次插入 = 把一个单结点堆与当前堆合并',
+          snap(curRoots(), {}, '配对堆', '建堆'));
+        vals.forEach(function (xv) {
+          var node = mkP(xv);
+          push(steps, [1, 4], '插入 ' + xv + '：单结点堆 ' + xv + ' 与当前堆（根 ' + (st.root ? st.root.v : '空') + '）准备合并',
+            snap([node].concat(curRoots()), { [node.id]: 'active' }, '配对堆', '插入 ' + xv));
+          st.root = merge(st.root, node);
+          push(steps, [4, 5], '合并完成：较小根 ' + st.root.v + ' 成为新根，另一棵挂为它的第一个孩子',
+            snap(curRoots(), { [st.root.id]: 'active' }, '配对堆', '插入 ' + xv));
+        });
+        return { steps: steps, state: st };
+      }
+
+      if (action.key === 'insert') {
+        var x = Number(action.arg);
+        if (!isFinite(x)) { push(steps, [7], '请输入合法的插入值。', snap(curRoots(), {}, '配对堆', '插入')); return { steps: steps, state: st }; }
+        var node = mkP(x);
+        push(steps, [1, 4], '插入 ' + x + '：单结点堆 ' + x + ' 与当前堆（根 ' + (st.root ? st.root.v : '空') + '）准备合并',
+          snap([node].concat(curRoots()), { [node.id]: 'active' }, '配对堆', '插入 ' + x));
+        st.root = merge(st.root, node);
+        push(steps, [4, 5], '合并完成：新根 = ' + st.root.v,
+          snap(curRoots(), { [st.root.id]: 'active' }, '配对堆', '插入完成'));
+        return { steps: steps, state: st };
+      }
+
+      if (action.key === 'deleteMin') {
+        if (!st.root) { push(steps, [9], '堆为空，无法删除最小值。', snap([], {}, '配对堆', '空堆')); return { steps: steps, state: st }; }
+        var minV = st.root.v, minId = st.root.id;
+        push(steps, [9], '堆顶根 ' + minV + ' 为最小值，将被删除',
+          snap(curRoots(), { [minId]: 'active' }, '配对堆', '删除最小值'));
+        var kids = st.root.kids.slice();
+        st.root = null;
+        push(steps, [10], '删除根 ' + minV + '，它的 ' + kids.length + ' 个孩子成为待合并森林：[' +
+          kids.map(function (c) { return c.v; }).join(', ') + ']',
+          snap(kids, {}, '配对堆', '拆分孩子'));
+
+        var paired = [];
+        for (var i = 0; i < kids.length; i += 2) {
+          if (i + 1 < kids.length) {
+            push(steps, [11], '第一遍·两两配对：合并根 ' + kids[i].v + ' 与根 ' + kids[i + 1].v,
+              snap([kids[i], kids[i + 1]], { [kids[i].id]: 'compare', [kids[i + 1].id]: 'compare' }, '配对堆', '两两配对'));
+            var m = merge(kids[i], kids[i + 1]);
+            paired.push(m);
+            push(steps, [4, 5], '合并结果：较小根 ' + m.v + ' 成为父结点，另一棵挂为第一个孩子',
+              snap([m], { [m.id]: 'active' }, '配对堆', '配对结果'));
+          } else {
+            paired.push(kids[i]);
+          }
+        }
+
+        while (paired.length > 1) {
+          var last = paired.pop();
+          var prev = paired[paired.length - 1];
+          push(steps, [12], '第二遍·从右向左合并：把最右侧 ' + last.v + ' 与相邻 ' + prev.v + ' 合并',
+            snap([prev, last], { [prev.id]: 'compare', [last.id]: 'compare' }, '配对堆', '右→左合并'));
+          paired[paired.length - 1] = merge(prev, last);
+          push(steps, [4, 5], '合并结果：根 ' + paired[paired.length - 1].v,
+            snap([paired[paired.length - 1]], { [paired[paired.length - 1].id]: 'active' }, '配对堆', '右→左合并'));
+        }
+        st.root = paired.length ? paired[0] : null;
+        push(steps, [13], '删除最小值 ' + minV + ' 完成' + (st.root ? '：新根 = ' + st.root.v : '：堆已空'),
+          snap(curRoots(), st.root ? { [st.root.id]: 'done' } : {}, '配对堆', '删除完成'));
+        return { steps: steps, state: st };
+      }
+
+      if (action.key === 'findMin') {
+        if (!st.root) { push(steps, [9], '堆为空。', snap([], {}, '配对堆', '空堆')); return { steps: steps, state: st }; }
+        push(steps, [9], '最小值即根 ' + st.root.v, snap(curRoots(), { [st.root.id]: 'active' }, '配对堆', '查看最小值'));
+        return { steps: steps, state: st };
+      }
+
+      push(steps, [0], '请选择操作。', snap(curRoots(), {}, '配对堆', '就绪'));
+      return { steps: steps, state: st };
+    },
+    render: function (kr, s) {
+      if (!s) { kr.html('__t', S.text(500, 30, '配对堆', 'vt')); kr.end(); return; }
+      var roots = (s.roots || []).filter(function (x) { return x; });
+      drawForest(kr, roots, s.hl, s.title, s.sub, {});
+    }
+  });
+
 })();

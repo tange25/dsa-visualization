@@ -1256,4 +1256,523 @@
     }
   });
 
+  /* ============================================================
+     6. Rabin-Karp 滚动哈希
+     ============================================================ */
+  DSV.register({
+    id: 'str-rabin-karp', name: 'Rabin-Karp 滚动哈希', category: '字符串算法',
+    desc: '用滚动哈希把模式串与每个窗口的哈希值做 O(1) 比较：哈希相同再逐字符确认防碰撞。窗口滑动时老哈希去头加尾一次算出，平均 O(n+m)，最坏 O(n·m)。',
+    code: [
+      '// 字符编码：A=1, ..., Z=26；B=26, M=97',
+      'hashOf(s):  h = 0',
+      '  for c in s: h = (h*B + code(c)) mod M',
+      'rabinKarp(T, P):',
+      '  hP = hashOf(P);  hT = hashOf(T[0..m-1])',
+      '  for i = 0 to n-m:',
+      '    if hT == hP:                     // 哈希相等',
+      '      逐字符确认 T[i..i+m-1] 与 P   // 防碰撞',
+      '    if i < n-m:                      // 滚动窗口',
+      '      hT = ((hT - code(T[i])*pow) * B + code(T[i+m])) mod M'
+    ],
+    inputs: [
+      { key: 'text', label: '文本串 T', def: 'ABABCABAB', hint: '长度不超过 30' },
+      { key: 'pat', label: '模式串 P', def: 'ABAB', hint: '长度不超过 10' }
+    ],
+    actions: [{ key: 'run', label: '开始匹配', primary: true }],
+    samples: [
+      { label: '示例：多次匹配', values: { text: 'ABABCABAB', pat: 'ABAB' } },
+      { label: '示例：无匹配', values: { text: 'AAAAABBBBB', pat: 'ABC' } }
+    ],
+    random: function () {
+      var A = 'ABC', n = DSV.ri(14, 20), t = '';
+      for (var i = 0; i < n; i++) { t += A.charAt(DSV.ri(0, 2)); }
+      var k = DSV.ri(2, Math.max(3, n - 6)), m = DSV.ri(3, 4);
+      return { text: t, pat: t.substr(k, m) };
+    },
+    run: function (v) {
+      var T = String(v.text == null ? '' : v.text).replace(/\s+/g, '').toUpperCase().slice(0, 30);
+      var P = String(v.pat == null ? '' : v.pat).replace(/\s+/g, '').toUpperCase().slice(0, 10);
+      var n = T.length, m = P.length, steps = [];
+      if (!n || !m || m > n) {
+        return [{ code: [1], desc: '输入无效：文本与模式都必须非空，且模式不超过文本长度。',
+          snap: { msg: '请输入非空文本 T 与模式 P（T≤30, P≤10）', warn: true } }];
+      }
+      var B = 26, M = 97;
+      function code(c) { return c.charCodeAt(0) - 64; }
+      function hstr(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * B + code(s.charAt(i))) % M; } return h; }
+      var pow = 1, q;
+      for (q = 0; q < m - 1; q++) { pow = (pow * B) % M; }
+      var hP = hstr(P);
+      function mkClsT(win) {
+        var c = rep(n);
+        for (var i = 0; i < n; i++) { c[i] = (win != null && i >= win && i < win + m) ? '' : 'dim'; }
+        return c;
+      }
+      var winHashes = rep(n - m + 1, ''), matches = [];
+      function snap(o) {
+        o = o || {};
+        return { text: T, pat: P, tcls: o.tcls || rep(n), pcls: rep(m), win: o.win == null ? -1 : o.win,
+          winHashes: winHashes.slice(), hPat: hP, matches: matches.slice(), msg: o.msg || '', warn: !!o.warn };
+      }
+      push(steps, [1], '约定：字符编码 A=1…Z=26，底数 B=' + B + '，模数 M=' + M + '（取小模数便于手算）。模式串 P = “' + P + '”，长度 m=' + m + '。',
+        snap({ msg: '编码与参数就绪' }));
+      push(steps, [2], '先算模式串哈希 hP = ' + hP + '（对 P = “' + P + '” 逐位 (h×26+code) mod 97）。',
+        snap({ msg: 'hP = ' + hP }));
+      var hT = hstr(T.slice(0, m));
+      winHashes[0] = hT;
+      push(steps, [4], '第一个窗口 T[0…' + (m - 1) + '] = “' + T.slice(0, m) + '” 的哈希 hT = ' + hT + '。',
+        snap({ win: 0, tcls: mkClsT(0), msg: '初始窗口哈希 = ' + hT }));
+      var i, guard = 0;
+      for (i = 0; i <= n - m && guard++ < 60; i++) {
+        if (hT === hP) {
+          var ok = true, j;
+          for (j = 0; j < m; j++) { if (T.charAt(i + j) !== P.charAt(j)) { ok = false; break; } }
+          if (ok) {
+            matches.push(i);
+            var cOk = rep(n);
+            for (j = i; j < i + m; j++) { cOk[j] = 'done'; }
+            push(steps, [5, 6], '窗口 i=' + i + '：hT=' + hT + ' == hP=' + hP + '，逐字符确认全部相同 → 在位置 ' + i + ' 匹配成功！',
+              snap({ win: i, tcls: cOk, msg: '位置 ' + i + ' 匹配成功' }));
+          } else {
+            push(steps, [6], '窗口 i=' + i + '：hT=' + hT + ' == hP=' + hP + '，但逐字符确认发现不同 → 哈希碰撞，跳过。',
+              snap({ win: i, tcls: mkClsT(i), msg: '哈希碰撞，跳过' }));
+          }
+        } else {
+          push(steps, [5], '窗口 i=' + i + '：hT=' + hT + ' ≠ hP=' + hP + '，窗口内不可能匹配，直接滑走。',
+            snap({ win: i, tcls: mkClsT(i), msg: 'hT=' + hT + ' ≠ hP=' + hP }));
+        }
+        if (i < n - m) {
+          var old = code(T.charAt(i)), neu = code(T.charAt(i + m));
+          hT = ((hT - old * pow) * B + neu) % M;
+          if (hT < 0) { hT += M; }
+          winHashes[i + 1] = hT;
+          push(steps, [7], '滚动到下一窗口：去掉左端 T[' + i + ']=“' + T.charAt(i) + '”（贡献 ' + old + '×' + pow + '），加入右端 T[' + (i + m) + ']=“' + T.charAt(i + m) + '”（贡献 ' + neu + '），新 hT = ' + hT + '。',
+            snap({ win: i + 1, tcls: mkClsT(i + 1), msg: '滚动后 hT = ' + hT }));
+        }
+      }
+      push(steps, [4], '扫描结束：' + (matches.length ? '共在位置 ' + matches.join('、') + ' 匹配到模式串。' : '文本中未出现模式串。'),
+        snap({ win: -1, tcls: rep(n), msg: matches.length ? '完成：' + matches.length + ' 处匹配' : '完成：未匹配' }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || !s.text) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || 'Rabin-Karp：输入文本与模式后点击「开始匹配」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, 'Rabin-Karp 滚动哈希（B=26, M=97）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      drawChars(kr, 't', s.text.split(''), 180, { label: '文本串 T（高亮 = 当前窗口）', cls: s.tcls });
+      drawChars(kr, 'p', s.pat.split(''), 270, { label: '模式串 P，hP=' + s.hPat, cls: s.pcls });
+      var items = s.winHashes.map(function (h, i) {
+        return { top: String(i), sub: h === '' ? '·' : 'h=' + h, cls: (s.win === i) ? 'active' : '' };
+      });
+      var cw = Math.min(58, Math.floor((1000 - 120) / Math.max(1, items.length)));
+      drawRow(kr, 'wh', '各窗口哈希（上行 = 窗口起点 i，下行 = 该窗口 hT）', items, 390, { cw: cw });
+      if (s.matches.length) { kr.html('__mm', S.text(500, 470, '已匹配位置：' + s.matches.join('、'), 'vs')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     7. Manacher 最长回文子串
+     ============================================================ */
+  DSV.register({
+    id: 'str-manacher', name: 'Manacher 最长回文子串', category: '字符串算法',
+    desc: '把串用 # 分隔成 t 以统一奇偶长度，维护最右回文边界 r 与中心 c：i 在 r 内时利用对称性 P[i]=min(r-i,P[2c-i]) 直接初始化再扩展。一次扫描 O(n) 求出所有回文半径。',
+    code: [
+      't = "#" + s.join("#") + "#"',
+      'c = 0; r = 0',
+      'for i = 0 to t.length-1:',
+      '  mir = 2*c - i',
+      '  if i < r: P[i] = min(r-i, P[mir])',
+      '  while t[i-1-P[i]] == t[i+1+P[i]]: P[i]++',
+      '  if i+P[i] > r: c = i; r = i+P[i]',
+      'answer = max(P[i])'
+    ],
+    inputs: [{ key: 's', label: '字符串', def: 'ABCCBAXY', hint: '长度不超过 12' }],
+    actions: [{ key: 'run', label: '开始计算', primary: true }],
+    samples: [
+      { label: '示例：偶回文', values: { s: 'ABCCBAXY' } },
+      { label: '示例：奇回文', values: { s: 'ABACDFDCA' } }
+    ],
+    random: function () {
+      var A = 'ABC', n = DSV.ri(6, 9), t = '';
+      for (var i = 0; i < n; i++) { t += A.charAt(DSV.ri(0, 2)); }
+      return { s: t };
+    },
+    run: function (v) {
+      var s = String(v.s == null ? '' : v.s).replace(/\s+/g, '').toUpperCase().slice(0, 12);
+      var steps = [];
+      if (!s.length) {
+        return [{ code: [1], desc: '请输入非空字符串。', snap: { msg: '请输入字符串', warn: true } }];
+      }
+      var t = '#' + s.split('').join('#') + '#';
+      var m = t.length, P = rep(m, 0);
+      var c = 0, r = 0, bestC = 0, bestR = 0;
+      function snap(o) {
+        o = o || {};
+        var items = [];
+        for (var i = 0; i < m; i++) {
+          items.push({ top: t.charAt(i), sub: String(P[i]), cls: (o.hl && o.hl[i]) || '' });
+        }
+        return { t: t, items: items, c: o.c == null ? -1 : o.c, r: o.r == null ? -1 : o.r, msg: o.msg || '', warn: !!o.warn };
+      }
+      push(steps, [1], '变换串 t = “' + t + '”（原串每个字符之间插入 #，奇偶长度就统一了），长度 ' + m + '。P[i] 记录以 i 为中心的回文半径。',
+        snap({ msg: '变换完成' }));
+      for (var i = 0; i < m; i++) {
+        var mir = 2 * c - i;
+        if (i < r) {
+          P[i] = Math.min(r - i, P[mir]);
+          (function (ii, mi) {
+            var h = {}; h[ii] = 'compare'; h[mi] = 'compare';
+            push(steps, [4], 'i=' + ii + ' 在右边界 r=' + r + ' 之内：利用对称性，镜像点 mir=' + mi + ' 的半径 P[mir]=' + P[mi] + '，直接令 P[' + ii + '] = min(r-i=' + (r - ii) + ', P[mir]=' + P[mi] + ') = ' + P[ii] + '（省掉重复比较）。',
+              snap({ c: c, r: r, hl: h, msg: '利用对称性初始化 P[' + ii + ']=' + P[ii] }));
+          })(i, mir);
+        } else {
+          (function (ii) {
+            var h = {}; h[ii] = 'active';
+            push(steps, [3], 'i=' + ii + ' 已在 r=' + r + ' 之外，没有对称信息可用，P[' + ii + '] 从 0 开始扩展。',
+              snap({ c: c, r: r, hl: h, msg: '从 0 开始扩展' }));
+          })(i);
+        }
+        var guard = 0;
+        while (i - 1 - P[i] >= 0 && i + 1 + P[i] < m && t.charAt(i - 1 - P[i]) === t.charAt(i + 1 + P[i]) && guard++ < 30) {
+          P[i]++;
+          (function (ii) {
+            var h = {};
+            for (var k = ii - P[ii]; k <= ii + P[ii]; k++) { h[k] = 'path'; }
+            h[ii] = 'active';
+            push(steps, [5], '向外扩展：t[' + (ii - P[ii]) + '] 与 t[' + (ii + P[ii]) + '] 都是 “' + t.charAt(ii - P[ii]) + '”，半径 P[' + ii + '] 扩大到 ' + P[ii] + '。',
+              snap({ c: c, r: r, hl: h, msg: 'P[' + ii + ']=' + P[ii] }));
+          })(i);
+        }
+        if (i + P[i] > r) {
+          c = i; r = i + P[i];
+          (function (ii) {
+            var h = {}; h[ii] = 'done';
+            push(steps, [6], 'i+P[i]=' + r + ' 超过旧右边界：更新中心 c=' + c + '、右边界 r=' + r + '。',
+              snap({ c: c, r: r, hl: h, msg: '更新 c=' + c + ', r=' + r }));
+          })(i);
+        }
+        if (P[i] > bestR) { bestR = P[i]; bestC = i; }
+      }
+      var pal = '';
+      for (var k = bestC - bestR + 1; k <= bestC + bestR - 1; k += 2) { pal += t.charAt(k); }
+      (function () {
+        var h = {};
+        for (var k2 = bestC - bestR; k2 <= bestC + bestR; k2++) { h[k2] = 'path'; }
+        push(steps, [7], '扫描结束：最长回文半径 P=' + bestR + '，对应最长回文子串 “' + pal + '”，长度 ' + bestR + '。Manacher 全程 O(n)。',
+          snap({ c: bestC, r: bestC + bestR, hl: h, msg: '最长回文 = “' + pal + '”' }));
+      })();
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || !s.t) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || 'Manacher：输入字符串后点击「开始计算」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, 'Manacher 最长回文子串', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      var m = s.items.length;
+      var cw = Math.min(44, Math.floor((1000 - 100) / m));
+      drawRow(kr, 'row', '变换串 t（上行字符，下行 = 回文半径 P[i]）', s.items, 220, { cw: cw });
+      var total = m * cw + (m - 1) * 6, x0 = (1000 - total) / 2;
+      function cx(i) { return x0 + i * (cw + 6) + cw / 2; }
+      if (s.c >= 0) { kr.g('__c', 'translate(' + cx(s.c) + ',150)', 'k', S.text(0, 0, '▼ c', 'ptr ptr-t')); }
+      if (s.r >= 0) { kr.g('__r', 'translate(' + cx(s.r) + ',150)', 'k', S.text(0, 0, '▼ r', 'ptr')); }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     8. 后缀数组（倍增法）
+     ============================================================ */
+  DSV.register({
+    id: 'str-suffix-array', name: '后缀数组（倍增法）', category: '字符串算法',
+    desc: '倍增法：先用单字符给后缀排名，再用二元组 (rank[i], rank[i+k]) 作为长度 2k 前缀的比较键重排重编号，k 逐轮翻倍直到所有排名唯一。每轮 O(n log n)、共 O(log n) 轮；最后 Kasai 在 O(n) 内求相邻后缀 LCP。',
+    code: [
+      '// 第 0 轮：按单字符给后缀排名',
+      'rank[i] = s[i] 的字符序',
+      'k = 1',
+      'while 排名未全部唯一:',
+      '  key[i] = (rank[i], i+k<n ? rank[i+k] : -1)',
+      '  按 key 对所有后缀排序',
+      '  重新编号 rank（相同 key 同号）',
+      '  k *= 2',
+      'SA = 按 rank 排好的后缀起点列表',
+      'LCP = Kasai 算法：相邻后缀最长公共前缀'
+    ],
+    inputs: [{ key: 's', label: '字符串', def: 'banana', hint: '长度不超过 10' }],
+    actions: [{ key: 'run', label: '开始计算', primary: true }],
+    samples: [
+      { label: '示例：banana', values: { s: 'banana' } },
+      { label: '示例：abracadabra', values: { s: 'abracadabra' } }
+    ],
+    random: function () {
+      var A = 'ab', n = DSV.ri(5, 8), t = '';
+      for (var i = 0; i < n; i++) { t += A.charAt(DSV.ri(0, 1)); }
+      return { s: t };
+    },
+    run: function (v) {
+      var s = String(v.s == null ? '' : v.s).replace(/\s+/g, '').toLowerCase().slice(0, 10);
+      var steps = [];
+      if (!s.length) {
+        return [{ code: [1], desc: '请输入非空字符串。', snap: { msg: '请输入字符串', warn: true } }];
+      }
+      var n = s.length, i;
+      var chars = [];
+      for (i = 0; i < n; i++) { if (chars.indexOf(s.charAt(i)) < 0) { chars.push(s.charAt(i)); } }
+      chars.sort();
+      var rank = [];
+      for (i = 0; i < n; i++) { rank.push(chars.indexOf(s.charAt(i))); }
+      function snap(o) {
+        o = o || {};
+        var rk = o.rank || rank;
+        var items = [];
+        for (var j = 0; j < n; j++) { items.push({ top: s.charAt(j), sub: 'r' + rk[j], cls: '' }); }
+        return { s: s, items: items, sa: o.sa || [], lcp: o.lcp || [], msg: o.msg || '', warn: !!o.warn };
+      }
+      push(steps, [1, 2], '第 0 轮：按单字符给每个位置的首字符排名。出现过的字符按字典序为 ' + chars.join('、') + '，于是 rank = [' + rank.join(', ') + ']。',
+        snap({ msg: '第 0 轮：rank = [' + rank.join(', ') + ']' }));
+      var k = 1, round = 1;
+      while (round < 6) {
+        var idx = [];
+        for (i = 0; i < n; i++) { idx.push(i); }
+        idx.sort(function (a, b) {
+          var ka0 = rank[a], ka1 = a + k < n ? rank[a + k] : -1;
+          var kb0 = rank[b], kb1 = b + k < n ? rank[b + k] : -1;
+          if (ka0 !== kb0) { return ka0 - kb0; }
+          return ka1 - kb1;
+        });
+        var newRank = rep(n, 0), cur = 0;
+        newRank[idx[0]] = 0;
+        for (i = 1; i < n; i++) {
+          var pa = idx[i - 1], pb = idx[i];
+          var same = (rank[pa] === rank[pb]) && ((pa + k < n ? rank[pa + k] : -1) === (pb + k < n ? rank[pb + k] : -1));
+          if (!same) { cur++; }
+          newRank[pb] = cur;
+        }
+        var orderTxt = idx.map(function (i2) { return s.slice(i2); }).join(' < ');
+        push(steps, [4, 5, 6], '第 ' + round + ' 轮（k=' + k + '）：用二元组 (rank[i], rank[i+' + k + ']) 作为长度 ' + (2 * k) + ' 前缀的比较键，排序后后缀顺序为：' + orderTxt + '。重新编号得新 rank = [' + newRank.join(', ') + ']。',
+          snap({ rank: newRank, msg: '第 ' + round + ' 轮：k=' + k + '，rank = [' + newRank.join(', ') + ']' }));
+        rank = newRank;
+        var allUniq = true;
+        for (var ra = 0; ra < n && allUniq; ra++) {
+          for (var rb = ra + 1; rb < n; rb++) { if (rank[ra] === rank[rb]) { allUniq = false; break; } }
+        }
+        if (allUniq) { break; }
+        k *= 2; round++;
+      }
+      var sa = [];
+      for (i = 0; i < n; i++) { sa.push(i); }
+      sa.sort(function (a, b) { return rank[a] - rank[b]; });
+      push(steps, [7], '排名已全部唯一，后缀数组 SA = [' + sa.join(', ') + ']，即后缀按字典序排列的起点：' + sa.map(function (i2) { return s.slice(i2); }).join(' < ') + '。',
+        snap({ sa: sa, msg: 'SA = [' + sa.join(', ') + ']' }));
+      var lcp = rep(n - 1, 0), h = 0, pos = rep(n, 0);
+      for (i = 0; i < n; i++) { pos[sa[i]] = i; }
+      for (i = 0; i < n; i++) {
+        if (pos[i] > 0) {
+          var j = sa[pos[i] - 1];
+          while (i + h < n && j + h < n && s.charAt(i + h) === s.charAt(j + h)) { h++; }
+          lcp[pos[i] - 1] = h;
+          if (h > 0) { h--; }
+        } else { h = 0; }
+      }
+      push(steps, [8], '用 Kasai 算法求相邻后缀的最长公共前缀 LCP = [' + lcp.join(', ') + ']（O(n)）。后缀数组演示完成。',
+        snap({ sa: sa, lcp: lcp, msg: 'LCP = [' + lcp.join(', ') + ']' }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || !s.s) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || '后缀数组：输入字符串后点击「开始计算」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, '后缀数组（倍增法）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      drawRow(kr, 'rk', '每个位置 i 的字符与当前 rank（上行=字符，下行=rank 值）', s.items, 180, { cw: 60 });
+      if (s.sa.length) {
+        kr.html('__sa', S.text(500, 300, 'SA 后缀字典序：' + s.sa.map(function (i) { return s.s.slice(i); }).join('  <  '), 'vs'));
+      }
+      if (s.lcp.length) {
+        kr.html('__lcp', S.text(500, 340, 'LCP 相邻公共前缀长度：[' + s.lcp.join(', ') + ']', 'vs'));
+      }
+      kr.end();
+    }
+  });
+
+  /* ============================================================
+     9. AC 自动机（多模式匹配）
+     ============================================================ */
+  DSV.register({
+    id: 'str-ac', name: 'AC 自动机', category: '字符串算法',
+    desc: '把多个模式串建成 Trie，再用 BFS 给每个结点算 fail 指针（类似 KMP 的回退）：扫描文本一次不停机，失配沿 fail 回退。建树 O(Σ模式长度)，扫描 O(文本长度 + 命中数)。',
+    code: [
+      '// 1. 建 Trie',
+      'for 每个模式串 w: 逐字符插入 Trie，结尾结点记 out=w',
+      '// 2. BFS 求 fail',
+      '根的孩子 fail = 根；入队',
+      'while 队列非空:',
+      '  u = 出队',
+      '  for u 的每个孩子 v（边 c）:',
+      '    f = u.fail',
+      '    while f 且 f 没有 c 这条边: f = f.fail',
+      '    v.fail = (f 有 c 边 ? f 的 c 孩子 : 根)',
+      '    v 入队',
+      '// 3. 扫描文本',
+      'p = 根',
+      'for c in 文本:',
+      '  while p 且 p 没有 c 边: p = p.fail',
+      '  p = p 的 c 孩子（或根）',
+      '  if p.out: 报告命中 p.out'
+    ],
+    inputs: [
+      { key: 'patterns', label: '模式串集合（每行一个）', def: 'he\nshe\nhis\nhers', hint: '每行一个单词', multiline: true },
+      { key: 'text', label: '文本串 T', def: 'ushers', hint: '长度不超过 30' }
+    ],
+    actions: [{ key: 'run', label: '开始匹配', primary: true }],
+    samples: [
+      { label: '示例：经典多模式', values: { patterns: 'he\nshe\nhis\nhers', text: 'ushers' } },
+      { label: '示例：命中多次', values: { patterns: 'he\nshe', text: 'aaasheaahe' } }
+    ],
+    random: function () {
+      var pool = ['he', 'she', 'his', 'hers', 'hi', 'is'];
+      var pats = DSV.shuffle(pool).slice(0, 3);
+      return { patterns: pats.join('\n'), text: 'ushersheishers' };
+    },
+    run: function (v) {
+      var words = String(v.patterns == null ? '' : v.patterns).split(/\r?\n/).map(function (w) { return w.trim(); }).filter(function (w) { return w !== ''; }).slice(0, 6);
+      var T = String(v.text == null ? '' : v.text).replace(/\s+/g, '').slice(0, 30);
+      var steps = [];
+      if (!words.length || !T.length) {
+        return [{ code: [1], desc: '输入无效：请至少填一个模式串（每行一个）与一段文本。', snap: { msg: '每行一个模式串，并填写文本串', warn: true } }];
+      }
+      var root = mkTNode('a0', '');
+      root.failId = 'a0';
+      var seq = 1, i, c;
+      words.forEach(function (w) {
+        var n = root;
+        for (var j = 0; j < w.length; j++) {
+          var ch = w.charAt(j);
+          if (!n.kids[ch]) { n.kids[ch] = mkTNode('a' + (seq++), ch); }
+          n = n.kids[ch];
+        }
+        n.end = true; n.word = w;
+      });
+      function byId(id) {
+        var found = null;
+        (function w(nn) {
+          if (found || !nn) { return; }
+          if (nn.id === id) { found = nn; return; }
+          for (var k in nn.kids) { if (nn.kids.hasOwnProperty(k)) { w(nn.kids[k]); } }
+        })(root);
+        return found;
+      }
+      function tsnap(o) {
+        o = o || {};
+        return { tree: DSV.clone(root), text: T, nodeCls: o.nodeCls || {}, matches: o.matches || [],
+          tcls: o.tcls || rep(T.length), msg: o.msg || '', warn: !!o.warn };
+      }
+      push(steps, [1, 2], '第一步：把 ' + words.length + ' 个模式串 [' + words.join('、') + '] 逐字符插入 Trie，结尾结点打 ✓。',
+        tsnap({ msg: 'Trie 建好' }));
+      var queue = [];
+      for (c in root.kids) {
+        if (!root.kids.hasOwnProperty(c)) { continue; }
+        root.kids[c].failId = 'a0';
+        queue.push(root.kids[c]);
+      }
+      push(steps, [3, 4], '第二步：BFS 求 fail 指针。根的所有孩子 fail 先指向根并入队。',
+        tsnap({ msg: '根孩子入队' }));
+      while (queue.length) {
+        var u = queue.shift();
+        for (var ch in u.kids) {
+          if (!u.kids.hasOwnProperty(ch)) { continue; }
+          var v = u.kids[ch];
+          var f = byId(u.failId);
+          while (f && f.id !== 'a0' && !f.kids[ch]) { f = byId(f.failId); }
+          v.failId = (f && f.kids[ch]) ? f.kids[ch].id : 'a0';
+          queue.push(v);
+          (function (uu, vv, chh) {
+            var h = {}; h[vv.id] = 'active';
+            push(steps, [5, 6, 7, 8], '处理边 “' + chh + '”（父=' + (uu.ch || '根') + ' → 子=' + vv.ch + '）：从 u.fail=' + (uu.failId === 'a0' ? '根' : byId(uu.failId).ch) + ' 开始沿 fail 回退，找到第一条有 ' + chh + ' 这条边的结点，于是 ' + vv.ch + '.fail = ' + (byId(vv.failId).ch || '根') + '。',
+              tsnap({ nodeCls: h, msg: vv.ch + '.fail = ' + (byId(vv.failId).ch || '根') }));
+          })(u, v, ch);
+        }
+      }
+      push(steps, [9], 'fail 指针全部就绪（图中虚线即 fail 边）。下面扫描文本 “' + T + '”。',
+        tsnap({ msg: '开始扫描文本' }));
+      var p = root, matches = [];
+      for (i = 0; i < T.length; i++) {
+        var ch2 = T.charAt(i), back = 0, f = p;
+        while (f && f.id !== 'a0' && !f.kids[ch2]) { f = byId(f.failId); back++; }
+        p = f && f.kids[ch2] ? f.kids[ch2] : root;
+        if (p.end) {
+          matches.push([i, p.word]);
+          var tcOk = rep(T.length);
+          for (var q = 0; q < T.length; q++) { tcOk[q] = 'dim'; }
+          for (var q2 = i - p.word.length + 1; q2 <= i; q2++) { tcOk[q2] = 'done'; }
+          (function (pp, backk, ii) {
+            var h = {}; h[pp.id] = 'done';
+            push(steps, [11, 12], '扫描 T[' + ii + ']=“' + T.charAt(ii) + '”' + (backk ? '：失配沿 fail 回退 ' + backk + ' 次' : '：直接沿边下行') + '，到达结尾结点 → 命中模式串 “' + pp.word + '”。',
+              tsnap({ nodeCls: h, matches: matches.slice(), tcls: tcOk, msg: '命中 “' + pp.word + '”（位置 ' + ii + '）' }));
+          })(p, back, i);
+        } else {
+          (function (pp, backk, ii) {
+            var h = {}; if (pp) { h[pp.id] = 'active'; }
+            var tc = rep(T.length); tc[ii] = 'active';
+            push(steps, [11], '扫描 T[' + ii + ']=“' + T.charAt(ii) + '”' + (backk ? '：失配沿 fail 回退 ' + backk + ' 次后匹配' : '：沿边直接下行') + '，当前结点暂无输出。',
+              tsnap({ nodeCls: h, matches: matches.slice(), tcls: tc, msg: '处理 T[' + ii + ']=“' + T.charAt(ii) + '”' }));
+          })(p, back, i);
+        }
+      }
+      push(steps, [12], '扫描结束：' + (matches.length ? '共命中 ' + matches.length + ' 次：' + matches.map(function (m2) { return '“' + m2[1] + '”@' + m2[0]; }).join('，') + '。' : '未命中任何模式串。'),
+        tsnap({ matches: matches.slice(), tcls: rep(T.length), msg: matches.length ? '完成：' + matches.length + ' 次命中' : '完成：未命中' }));
+      return steps;
+    },
+    render: function (kr, s) {
+      if (!s || !s.tree) {
+        kr.html('__e', S.text(500, 280, (s && s.msg) || 'AC 自动机：填好模式串与文本后点击「开始匹配」', 'vs'));
+        kr.end(); return;
+      }
+      kr.html('__t', S.text(500, 26, 'AC 自动机（虚线 = fail 指针）', 'vt'));
+      kr.html('__s', S.text(500, 50, s.msg || '', 'vs'));
+      function kidsOf(nn) {
+        var ks = [];
+        for (var k in nn.kids) { if (nn.kids.hasOwnProperty(k)) { ks.push(nn.kids[k]); } }
+        return ks;
+      }
+      var d = depthOf(s.tree, kidsOf);
+      var dy = Math.max(46, Math.min(60, (380 - 120) / Math.max(1, d)));
+      var pos = layoutNary(s.tree, kidsOf, { top: 130, dy: dy, sp: 100 });
+      /* fail 边（虚线曲线） */
+      var fe = '';
+      (function w(nn) {
+        var pp = pos[nn.id];
+        if (nn.failId && nn.failId !== 'a0' && pos[nn.failId] && pp) {
+          var fp = pos[nn.failId];
+          fe += S.path('M ' + pp.x + ' ' + (pp.y + 16) + ' C ' + pp.x + ' ' + (pp.y + 66) + ', ' + fp.x + ' ' + (fp.y + 66) + ', ' + fp.x + ' ' + (fp.y + 16), 'edge path', 'stroke-dasharray="5 4"');
+        }
+        kidsOf(nn).forEach(w);
+      })(s.tree);
+      kr.html('__fe', fe);
+      /* Trie 边与结点 */
+      var ge = kr.g('__E', 'translate(0,0)', 'k'), gn = kr.g('__N', 'translate(0,0)', 'k');
+      (function walk(nn) {
+        var pp = pos[nn.id], ks = kidsOf(nn);
+        for (var i = 0; i < ks.length; i++) {
+          var cp = pos[ks[i].id];
+          kr.html('e_' + nn.id + '_' + ks[i].ch, S.line(pp.x, pp.y, cp.x, cp.y, 'edge tree'), ge);
+          walk(ks[i]);
+        }
+        var cls = s.nodeCls[nn.id] || (nn.end ? 'done' : '');
+        var inner = (nn.id === 'a0')
+          ? S.rect(-22, -15, 44, 30) + S.text(0, 0, '根')
+          : S.circle(0, 0, 17) + S.text(0, 0, nn.ch) + (nn.end ? S.text(10, -10, '✓') : '');
+        kr.g('n_' + nn.id, 'translate(' + pp.x + ',' + pp.y + ')', 'k nd ' + cls, inner, gn);
+      })(s.tree);
+      /* 文本行 */
+      drawChars(kr, 't', s.text.split(''), 470, { label: '文本串 T（高亮 = 命中区间）', cls: s.tcls });
+      kr.end();
+    }
+  });
+
 })();
