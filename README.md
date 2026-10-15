@@ -1,6 +1,6 @@
 # 数据结构与算法可视化
 
-> 中文版数据结构与算法可视化教学网页：**零依赖、纯原生 JavaScript + SVG**，覆盖 10 个章节、**95 个可视化主题**，全部支持分步动画、单步执行与伪代码同步高亮。
+> 中文版数据结构与算法可视化静态教学网页：**零依赖、纯原生 JavaScript + SVG**，覆盖 10 个章节、**95 个可视化主题**，全部支持分步动画、单步执行与伪代码同步高亮。
 
 - 在线演示：[GitHub Pages](https://tange25.github.io/dsa-visualization/)（如启用 Pages 后地址不同，以实际为准）
 - 仓库地址：<https://github.com/tange25/dsa-visualization>
