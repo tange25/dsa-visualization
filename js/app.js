@@ -52,7 +52,10 @@
         a.className = 'nav-item' + (App.cur && App.cur.id === id ? ' active' : '');
         a.textContent = d.name;
         a.title = d.desc || '';
-        a.onclick = function () { location.hash = '#' + id; };
+        a.onclick = function () {
+          location.hash = '#' + id;
+          if (isMobile()) { closeDrawer(); }
+        };
         ul.appendChild(a);
       });
       sec.appendChild(ul);
@@ -414,6 +417,39 @@
     if (App.cur && n) { setDesc((App.steps[App.idx] || {}).desc || ''); }
   }
 
+  /* ---------------- 侧栏收起 / 移动端抽屉 ---------------- */
+  var SIDEBAR_KEY = 'dsvSidebarCollapsed';
+  var mqMobile = window.matchMedia('(max-width: 900px)');
+  var wrapEl = document.querySelector('.wrap');
+
+  function isMobile() { return mqMobile.matches; }
+
+  function readCollapsed() {
+    var v = '0';
+    try { v = localStorage.getItem(SIDEBAR_KEY) || '0'; } catch (e) {}
+    return v === '1';
+  }
+
+  function applyCollapsed(collapsed) {
+    wrapEl.classList.toggle('collapsed', collapsed);
+    try { localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0'); } catch (e) {}
+    $('menuBtn').setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+
+  function closeDrawer() { document.body.classList.remove('drawer-open'); }
+
+  function toggleDrawer() { document.body.classList.toggle('drawer-open'); }
+
+  function initSidebar() {
+    if (isMobile()) {
+      closeDrawer();
+      wrapEl.classList.remove('collapsed');
+      $('menuBtn').setAttribute('aria-expanded', 'false');
+    } else {
+      applyCollapsed(readCollapsed());
+    }
+  }
+
   /* ---------------- 事件绑定 ---------------- */
   function bind() {
     $('btnPlay').onclick = function () { App.playing ? stop() : play(); };
@@ -433,6 +469,17 @@
 
     $('navSearch').oninput = function () { buildNav(this.value); };
 
+    // 目录开关：桌面端收起/展开侧栏，移动端打开抽屉
+    $('menuBtn').onclick = function () {
+      if (isMobile()) { toggleDrawer(); }
+      else { applyCollapsed(!wrapEl.classList.contains('collapsed')); }
+    };
+    $('sidebarToggle').onclick = function () {
+      if (isMobile()) { closeDrawer(); }
+      else { applyCollapsed(!wrapEl.classList.contains('collapsed')); }
+    };
+    $('sidebarBackdrop').onclick = closeDrawer;
+
     // 复制当前伪代码
     $('btnCopyCode').onclick = function () {
       var text = currentCodeText();
@@ -450,6 +497,7 @@
     };
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeDrawer(); return; }
       if (e.target && /input|select|textarea/i.test(e.target.tagName)) { return; }
       if (e.code === 'Space') { e.preventDefault(); App.playing ? stop() : play(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); stop(); next(); }
@@ -462,12 +510,21 @@
       if (id && DSV.defs[id]) { load(id); }
     });
 
-    window.addEventListener('resize', function () { /* SVG 自适应，无需处理 */ });
+    window.addEventListener('resize', function () {
+      // 桌面 ↔ 移动端切换时各自状态互不干扰
+      if (isMobile()) {
+        closeDrawer();
+        wrapEl.classList.remove('collapsed');
+      } else {
+        wrapEl.classList.toggle('collapsed', readCollapsed());
+      }
+    });
   }
 
   /* ---------------- 启动 ---------------- */
   function boot() {
     bind();
+    initSidebar();
     buildNav('');
     var id = location.hash.replace(/^#/, '');
     if (id && DSV.defs[id]) { load(id); }

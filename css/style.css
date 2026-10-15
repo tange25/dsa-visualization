@@ -260,6 +260,33 @@ body::after {
   background: transparent;
 }
 
+/* 目录开关：桌面端收起/展开侧栏，移动端打开抽屉 */
+.menu-btn {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.menu-btn:hover {
+  background: var(--paper-3);
+  border-color: var(--ink-3);
+  color: var(--accent);
+}
+
+.menu-ico { display: block; }
+.menu-ico-x { display: none; }
+
 /* ============ 6. 三栏栅格 ============ */
 .wrap {
   max-width: 1680px;
@@ -269,10 +296,15 @@ body::after {
   grid-template-columns: 248px minmax(0, 1fr) 320px;
   gap: var(--s-4);
   align-items: start;
+  transition: grid-template-columns var(--dur-base) var(--ease);
 }
+
+/* 桌面端：收起侧栏后主区接管整行 */
+.wrap.collapsed { grid-template-columns: minmax(0, 1fr) 320px; }
 
 @media (max-width: 1400px) {
   .wrap { grid-template-columns: 220px minmax(0, 1fr); }
+  .wrap.collapsed { grid-template-columns: minmax(0, 1fr); }
   .side-right { grid-column: 1 / -1; }
 }
 
@@ -370,6 +402,57 @@ body::after {
   font-size: var(--t-sm);
   line-height: 1.7;
 }
+
+/* 侧栏头部：目录标题 + 收起按钮 */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: .08em;
+  color: var(--ink);
+  user-select: none;
+}
+
+.sidebar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* 与 ctrl-title / legend-title 同款朱红竖向标记 */
+.sidebar-title::before {
+  content: "";
+  width: 3px;
+  height: 11px;
+  background: var(--accent);
+}
+
+.sidebar-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  line-height: 1;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.sidebar-toggle::before { content: "‹"; font-size: 15px; }
+
+.sidebar-toggle:hover { background: var(--paper-3); color: var(--accent); }
 
 /* ============ 8. 主区 ============ */
 .main {
@@ -1255,3 +1338,69 @@ input[type=range] { accent-color: var(--accent); }
 }
 
 .qmodal-close:hover { background: var(--green); color: #fff; }
+
+/* ============================================================
+   20. 侧栏收起（桌面）与移动端抽屉
+   ------------------------------------------------------------
+   桌面（≥901px）：侧栏整体可收起，收起后主区接管整行，
+                 顶栏目录开关由 ☰ 变为 ✕。
+   移动（≤900px）：侧栏改为左侧滑出抽屉 + 半透明遮罩，
+                 打开时锁定页面滚动，选中目录项后自动关闭。
+   ============================================================ */
+
+/* —— 桌面端收起态（移动端抽屉不受影响） —— */
+@media (min-width: 901px) {
+  .wrap.collapsed .sidebar { display: none; }
+  .wrap.collapsed .menu-ico { display: none; }
+  .wrap.collapsed .menu-ico-x { display: block; }
+}
+
+/* —— 抽屉遮罩（仅移动端激活，桌面端恒不可见） —— */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(27, 25, 22, .38);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-base) var(--ease),
+              visibility var(--dur-base);
+}
+
+body.drawer-open .sidebar-backdrop {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* —— 移动端：侧栏改为左侧抽屉 —— */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    max-height: 100vh;
+    margin: 0;
+    border: 0;
+    border-right: 1px solid var(--rule-2);
+    border-radius: 0;
+    box-shadow: var(--sh-3);
+    z-index: 1001;
+    transform: translateX(-104%);
+    visibility: hidden;
+    transition: transform var(--dur-base) var(--ease),
+                visibility var(--dur-base);
+    animation: none !important;
+    overscroll-behavior: contain;
+  }
+
+  body.drawer-open .sidebar {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  body.drawer-open { overflow: hidden; }
+
+  .sidebar-toggle::before { content: "✕"; font-size: 12px; }
+}
