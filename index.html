@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数据结构与算法可视化</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23006633'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' fill='white'%3E%E2%99%9B%3C/text%3E%3C/svg%3E">
+<meta name="description" content="中文版数据结构与算法可视化教学网页：栈、队列、递归、二叉搜索树、AVL 树、红黑树、B 树、哈希表、排序算法、字符串匹配、堆、图算法、动态规划等的逐步动画演示。">
+<!-- 字体：Bodoni Moda（拉丁展示字）· Noto Serif SC（中文唯一字声，按 unicode-range 切片按需加载）· JetBrains Mono（代码与数字） -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/bodoni-moda@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/400.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/700.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/jetbrains-mono@5/index.css">
+<link rel="stylesheet" href="css/style.css?v=20261014p">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>数据结构与算法可视化</h1>
+    <div class="topbar-sub">分步动画 · 单步执行 · 伪代码同步高亮 · 支持自定义数据</div>
+    <div class="topbar-search">
+      <input id="navSearch" type="search" placeholder="搜索算法，例如：快排 / AVL / Dijkstra" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- 左侧章节导航 -->
+  <aside class="sidebar" id="sidebar">
+    <nav id="nav" aria-label="算法章节导航"></nav>
+  </aside>
+
+  <!-- 主区域 -->
+  <main class="main">
+
+    <div class="panel-head">
+      <h2 id="vizTitle">请选择左侧的算法</h2>
+      <p id="vizDesc">本站覆盖基础结构、递归、索引结构、排序、字符串、堆结构、图算法、动态规划、几何算法与并查集等 58 个可视化主题。</p>
+    </div>
+
+    <!-- 算法专属控制区（数据输入 + 操作按钮） -->
+    <section class="ctrl" id="inputSection" hidden>
+      <div class="ctrl-title">数据输入</div>
+      <div class="fields" id="fields"></div>
+      <div class="row" id="dataRow">
+        <button class="btn" id="btnRandom" type="button">随机生成</button>
+        <label class="inline">示例：
+          <select id="sampleSel"><option value="">— 典型示例 —</option></select>
+        </label>
+        <button class="btn ghost" id="btnApply" type="button">应用数据</button>
+        <button class="btn ghost" id="btnClear" type="button">清空结构</button>
+      </div>
+      <div class="row" id="actionRow"></div>
+    </section>
+
+    <!-- 画布 -->
+    <div class="stage-wrap">
+      <svg id="stage" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet" role="img" aria-label="算法可视化画布"></svg>
+      <div class="stage-empty" id="stageEmpty">从左侧导航中选择一个算法开始演示</div>
+    </div>
+
+    <!-- 中文说明条 -->
+    <div class="descbar" id="descbar">
+      <span class="desc-idx" id="descIdx">—</span>
+      <span class="desc-txt" id="descTxt">尚未开始。</span>
+    </div>
+
+    <!-- 通用动画控制区 -->
+    <section class="ctrl" id="animSection" hidden>
+      <div class="ctrl-title">动画控制</div>
+      <div class="row">
+        <button class="btn" id="btnFirst" type="button" title="回到开头">⏮ 重置</button>
+        <button class="btn" id="btnPrev" type="button" title="上一步（←）">◀ 上一步</button>
+        <button class="btn primary" id="btnPlay" type="button" title="播放 / 暂停（空格）">▶ 自动播放</button>
+        <button class="btn" id="btnNext" type="button" title="下一步（→）">下一步 ▶</button>
+        <button class="btn" id="btnLast" type="button" title="跳到结尾">⏭ 末尾</button>
+      </div>
+      <div class="row">
+        <label class="inline">速度：<input type="range" id="speed" min="1" max="10" step="1" value="5"><span id="speedTxt">1.0×</span></label>
+        <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+        <span class="step-count" id="stepCount">0 / 0</span>
+      </div>
+      <div class="row hint-row">快捷键：空格 播放/暂停 · ← → 单步 · R 重置</div>
+    </section>
+
+  </main>
+
+  <!-- 右侧伪代码 -->
+  <aside class="side-right">
+    <div class="pseudo">
+      <div class="pseudo-title">
+        <span id="pseudoTitleText">伪代码</span>
+        <span class="pseudo-sub" id="pseudoSub"></span>
+      </div>
+      <div class="lang-tabs" id="langTabs">
+        <span class="lt-view">伪代码</span>
+        <button type="button" class="lt copy" id="btnCopyCode" title="复制当前伪代码">⧉ 复制</button>
+      </div>
+      <div class="pseudo-body" id="pseudoBody">
+        <div class="pseudo-empty">选择算法后，这里会显示该算法的伪代码，并随动画逐步高亮当前执行的行。</div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-title">图例</div>
+      <ul>
+        <li><span class="sw sw-active"></span>当前操作 / 指针</li>
+        <li><span class="sw sw-compare"></span>正在比较</li>
+        <li><span class="sw sw-swap"></span>交换 / 移动</li>
+        <li><span class="sw sw-done"></span>已完成 / 确定</li>
+        <li><span class="sw sw-path"></span>路径 / 结果边</li>
+        <li><span class="sw sw-dead"></span>已删除 / 无效</li>
+      </ul>
+    </div>
+  </aside>
+
+</div>
+
+<footer class="footer">
+  <div>数据结构与算法可视化</div>
+</footer>
+
+<script src="js/core.js?v=20261014p"></script>
+<script src="js/viz-basics.js?v=20261009o"></script>
+<script src="js/viz-recursion.js?v=20261014q"></script>
+<script src="js/viz-indexing1.js?v=20261014r"></script>
+<script src="js/viz-indexing2.js?v=20261009o"></script>
+<script src="js/viz-sorting.js?v=20261009o"></script>
+<script src="js/viz-dp.js?v=20261009o"></script>
+<script src="js/viz-strings.js?v=20261009o"></script>
+<script src="js/viz-heaps.js?v=20261014r"></script>
+<script src="js/viz-graph.js?v=20261009o"></script>
+<script src="js/viz-geo.js?v=20261009o"></script>
+<script src="js/viz-other.js?v=20261014t"></script>
+<script src="js/app.js?v=20261014p"></script>
+</body>
+</html>
