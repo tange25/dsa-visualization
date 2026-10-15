@@ -84,6 +84,7 @@
 
     stop();
     App.cur = d;
+    if (DSV.drag) { DSV.drag.setAlgo(d.id); }
     App.curCat = d.category;
     App.steps = [];
     App.idx = -1;
@@ -397,6 +398,7 @@
       kr.html('__err', DSV.svg.textL(40, 40, '渲染出错：' + (err && err.message ? err.message : err), 'vwarn'));
     }
     kr.end();
+    if (DSV.drag) { DSV.drag.apply(); }
   }
 
   function setDesc(txt) {

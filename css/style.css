@@ -1198,6 +1198,24 @@ input[type=range] { accent-color: var(--accent); }
   stroke-width: 2;
 }
 
+/* ===== 节点自由拖拽 ===== */
+#stage g.nd[data-k] {
+  cursor: grab;
+}
+#stage.dragging,
+#stage.dragging g.nd[data-k] {
+  cursor: grabbing;
+}
+/* 拖拽过程中禁用 KRender 的过渡动画，保证节点跟手 */
+#stage.dragging .k {
+  transition: none !important;
+}
+/* 悬停可拖节点时轻微提示 */
+#stage g.nd[data-k]:hover circle,
+#stage g.nd[data-k]:hover rect {
+  filter: brightness(1.04);
+}
+
 /* 数组 / 柱状图 */
 .bar {
   fill: #e2ede1;
