@@ -101,6 +101,16 @@
   --c-dead: #c9c3b8;      /* 无效/删除（仅微调为暖灰，未被 JS 硬编码） */
   --c-red: #c2352b;
   --c-black: #1a1a1a;
+
+  /* —— 中性填充与氛围（供深色主题整体覆盖） —— */
+  --nd-fill: #ffffff;           /* 节点 / 盒子默认填充 */
+  --cell-fill: #ffffff;         /* 单元格默认填充 */
+  --bar-fill: #e2ede1;          /* 柱状图默认填充 */
+  --paper-dot: rgba(27, 25, 22, .055);   /* 画布方格纸圆点 */
+  --hover-wash: rgba(27, 25, 22, .035);  /* 伪代码行悬停淡色 */
+  --sw-border: rgba(27, 25, 22, .2);     /* 图例色块描边 */
+  --sw-shine: rgba(255, 255, 255, .35);  /* 图例色块内高光 */
+  --backdrop: rgba(27, 25, 22, .38);     /* 抽屉遮罩 */
 }
 
 /* ============ 2. 基础重置 ============ */
@@ -701,7 +711,7 @@ input[type=range] { accent-color: var(--accent); }
   position: relative;
   background-color: var(--paper);
   /* 极淡方格纸底纹 */
-  background-image: radial-gradient(circle at 1px 1px, rgba(27, 25, 22, .055) 1px, transparent 1.2px);
+  background-image: radial-gradient(circle at 1px 1px, var(--paper-dot) 1px, transparent 1.2px);
   background-size: 24px 24px;
   border: 1px solid var(--rule);
   border-radius: var(--r-md);
@@ -922,7 +932,7 @@ input[type=range] { accent-color: var(--accent); }
   transition: background var(--dur-fast) var(--ease);
 }
 
-.pc-line:hover { background: rgba(27, 25, 22, .035); }
+.pc-line:hover { background: var(--hover-wash); }
 
 .pc-no {
   flex: none;
@@ -992,10 +1002,10 @@ input[type=range] { accent-color: var(--accent); }
   width: 11px;
   height: 11px;
   border-radius: var(--r-sm);
-  border: 1px solid rgba(27, 25, 22, .2);
+  border: 1px solid var(--sw-border);
   display: inline-block;
   flex: none;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .35);
+  box-shadow: inset 0 1px 1px var(--sw-shine);
 }
 
 .sw-active  { background: var(--c-active); }
@@ -1061,7 +1071,7 @@ input[type=range] { accent-color: var(--accent); }
 .nd path {
   stroke: var(--green);
   stroke-width: 2;
-  fill: #fff;
+  fill: var(--nd-fill);
 }
 
 .nd.active rect,
@@ -1218,7 +1228,7 @@ input[type=range] { accent-color: var(--accent); }
 
 /* 数组 / 柱状图 */
 .bar {
-  fill: #e2ede1;
+  fill: var(--bar-fill);
   stroke: var(--green);
   stroke-width: 1.5;
 }
@@ -1237,7 +1247,7 @@ input[type=range] { accent-color: var(--accent); }
 }
 
 .cell {
-  fill: #fff;
+  fill: var(--cell-fill);
   stroke: var(--green);
   stroke-width: 1.5;
 }
@@ -1378,7 +1388,7 @@ input[type=range] { accent-color: var(--accent); }
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(27, 25, 22, .38);
+  background: var(--backdrop);
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-base) var(--ease),
@@ -1421,4 +1431,183 @@ body.drawer-open .sidebar-backdrop {
   body.drawer-open { overflow: hidden; }
 
   .sidebar-toggle::before { content: "✕"; font-size: 12px; }
+}
+
+/* ============================================================
+   21. 黑夜 / 白天主题切换按钮 + 画布全屏
+   ============================================================ */
+
+/* —— 主题切换按钮（复用 .menu-btn 外形，图标按主题互切） —— */
+.theme-btn { margin-left: 10px; }
+
+.theme-ico { display: block; }
+.theme-ico-sun { display: none; }
+[data-theme="dark"] .theme-ico-sun { display: block; }
+[data-theme="dark"] .theme-ico-moon { display: none; }
+
+/* —— 画布全屏按钮（画布右上角，悬停显现，触屏常显） —— */
+.stage-fs-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+
+.stage-wrap:hover .stage-fs-btn,
+.stage-fs-btn:focus-visible,
+.stage-wrap.fs-open .stage-fs-btn { opacity: 1; }
+
+.stage-fs-btn:hover {
+  background: var(--paper-3);
+  border-color: var(--ink-3);
+  color: var(--accent);
+}
+
+@media (hover: none) { .stage-fs-btn { opacity: 1; } }
+
+.fs-ico { display: block; }
+.fs-ico-out { display: none; }
+.stage-wrap.fs-open .fs-ico-in { display: none; }
+.stage-wrap.fs-open .fs-ico-out { display: block; }
+
+/* —— 全屏态：画布占满视口 ——
+   原生 Fullscreen API 与 JS 降级（.fs-open）共用同一套样式 */
+.stage-wrap.fs-open,
+.stage-wrap:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
+}
+
+.stage-wrap.fs-open #stage,
+.stage-wrap:fullscreen #stage {
+  width: 100%;
+  height: 100%;
+}
+
+/* —— 全屏态底部说明条（仅全屏时显示，内容由 app.js setDesc 同步） —— */
+.fs-desc {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 14px 18px;
+  background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.stage-wrap.fs-open .fs-desc { display: flex; }
+
+.fs-desc .desc-idx {
+  color: #ffd9c8;
+  border-color: rgba(255, 215, 200, .65);
+}
+
+.fs-desc .desc-txt { color: #f6f2e9; }
+
+/* ============================================================
+   22. 黑夜主题（深墨纸面）
+   ------------------------------------------------------------
+   以 CSS 变量整体翻面：纸面换深墨、墨色换暖亮；
+   画布六色教学语义（金/蓝/赭/绿/紫/灰）保持原值不变，
+   只调中性填充、氛围层与个别深色下失色的硬编码元素。
+   ============================================================ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #17150F;
+  --paper-2: #201D16;
+  --paper-3: #2A261D;
+  --paper-4: #37322A;
+
+  --ink: #EAE3D3;
+  --ink-2: #B5AC9C;
+  --ink-3: #8C8372;
+
+  --rule: #302C23;
+  --rule-2: #403A2F;
+
+  --accent: #C2584A;
+  --accent-2: #B04336;
+  --accent-wash: #3A2420;
+
+  --hl: #3B3116;
+  --hl-soft: #2E2817;
+
+  --ink-deep: #17150F;
+  --code-fg: #EAE3D3;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .45), 0 1px 1px rgba(0, 0, 0, .35);
+  --sh-2: 0 4px 14px rgba(0, 0, 0, .5), 0 1px 3px rgba(0, 0, 0, .4);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, .6), 0 2px 8px rgba(0, 0, 0, .45);
+
+  --nd-fill: #252219;
+  --cell-fill: #252219;
+  --bar-fill: #26352D;
+  --paper-dot: rgba(234, 227, 211, .07);
+  --hover-wash: rgba(234, 227, 211, .05);
+  --sw-border: rgba(234, 227, 211, .25);
+  --sw-shine: rgba(255, 255, 255, .06);
+  --backdrop: rgba(0, 0, 0, .55);
+}
+
+/* 深色纸面的颗粒与光晕（替换浅色的三处暖光） */
+[data-theme="dark"] body::before { opacity: .07; }
+
+[data-theme="dark"] body::after {
+  background:
+    radial-gradient(1100px 620px at 10% -10%, rgba(194, 88, 74, .10), transparent 62%),
+    radial-gradient(900px 560px at 95% 0%, rgba(63, 148, 108, .08), transparent 60%),
+    radial-gradient(1200px 700px at 50% 108%, rgba(234, 227, 211, .06), transparent 62%);
+}
+
+/* 深色下个别硬编码色值修正（教学语义色保持原值） */
+[data-theme="dark"] .edge.dim { stroke: #3C4A42; }
+
+[data-theme="dark"] .nd.black rect,
+[data-theme="dark"] .nd.black circle,
+[data-theme="dark"] .nd.black polygon,
+[data-theme="dark"] .nd.black path { stroke: #8A8A8A; }
+
+/* 指针 / 索引标签在深色下提亮，保持可读 */
+[data-theme="dark"] .ptr { fill: #4FC08C; }
+[data-theme="dark"] .ptr-t { fill: #E58678; }
+[data-theme="dark"] .nd-label { fill: #D08A7A; }
+
+/* N 皇后弹窗深色适配 */
+[data-theme="dark"] .qmodal-box {
+  background: var(--paper);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+}
+
+[data-theme="dark"] .qmodal-close {
+  background: var(--paper);
+  color: #3FB26E;
+  border-color: #3FB26E;
+}
+
+[data-theme="dark"] .qmodal-close:hover {
+  background: #3FB26E;
+  color: #17150F;
 }

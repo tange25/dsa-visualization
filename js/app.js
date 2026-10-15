@@ -404,6 +404,10 @@
   function setDesc(txt) {
     $('descTxt').textContent = txt || '';
     $('descIdx').textContent = App.steps.length ? (App.idx + 1) + ' / ' + App.steps.length : '—';
+    // 同步全屏说明条（画布全屏时底部显示同一份说明）
+    var fsIdx = $('fsDescIdx'), fsTxt = $('fsDescTxt');
+    if (fsIdx) { fsIdx.textContent = $('descIdx').textContent; }
+    if (fsTxt) { fsTxt.textContent = $('descTxt').textContent; }
   }
 
   function updateControls() {
@@ -452,6 +456,68 @@
     }
   }
 
+  /* ---------------- 黑夜 / 白天主题 ---------------- */
+  var THEME_KEY = 'dsvTheme';
+
+  function readTheme() {
+    var t = '';
+    try { t = localStorage.getItem(THEME_KEY) || ''; } catch (e) {}
+    if (t === 'dark' || t === 'light') { return t; }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    var btn = $('themeBtn');
+    if (btn) { btn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false'); }
+  }
+
+  /* ---------------- 画布全屏 ---------------- */
+  var fsState = { native: false, fallback: false };
+
+  function fsIsOpen() { return fsState.native || fsState.fallback; }
+
+  function toggleFs() {
+    var w = $('stageWrap');
+    if (fsIsOpen()) {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        // 原生全屏：退出后由 fullscreenchange → syncFsState 清理状态
+        document.exitFullscreen().catch(function () {});
+      } else {
+        // 降级模式：直接关闭
+        fsState.fallback = false;
+        w.classList.remove('fs-open');
+      }
+      syncFsState();
+    } else {
+      if (w.requestFullscreen) {
+        w.requestFullscreen().then(
+          function () { fsState.native = true; syncFsState(); },
+          function () { fsState.fallback = true; w.classList.add('fs-open'); syncFsState(); }
+        );
+      } else {
+        fsState.fallback = true;
+        w.classList.add('fs-open');
+        syncFsState();
+      }
+    }
+  }
+
+  function syncFsState() {
+    // 原生全屏若被用户按 Esc 退出，fullscreenElement 变 null，同步清掉标记
+    if (fsState.native && !document.fullscreenElement) { fsState.native = false; }
+    var on = fsState.native || fsState.fallback;
+    var w = $('stageWrap');
+    // 原生全屏（:fullscreen）与降级模式（.fs-open）共用同一套视觉样式
+    w.classList.toggle('fs-open', on);
+    var btn = $('stageFsBtn');
+    if (btn) {
+      btn.setAttribute('aria-label', on ? '退出画布全屏' : '全屏展开画布');
+      btn.title = on ? '退出画布全屏（F）' : '全屏展开画布（F）';
+    }
+  }
+
   /* ---------------- 事件绑定 ---------------- */
   function bind() {
     $('btnPlay').onclick = function () { App.playing ? stop() : play(); };
@@ -482,6 +548,15 @@
     };
     $('sidebarBackdrop').onclick = closeDrawer;
 
+    // 主题切换：白天 ↔ 黑夜
+    $('themeBtn').onclick = function () {
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    };
+
+    // 画布全屏：点击展开，再次点击恢复（Esc 由浏览器原生退出，fullscreenchange 同步状态）
+    $('stageFsBtn').onclick = toggleFs;
+    document.addEventListener('fullscreenchange', syncFsState);
+
     // 复制当前伪代码
     $('btnCopyCode').onclick = function () {
       var text = currentCodeText();
@@ -499,12 +574,22 @@
     };
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeDrawer(); return; }
+      if (e.key === 'Escape') {
+        closeDrawer();
+        // 非原生全屏（降级模式）下，Esc 同样退出画布全屏
+        if (fsState.fallback) {
+          fsState.fallback = false;
+          $('stageWrap').classList.remove('fs-open');
+          syncFsState();
+        }
+        return;
+      }
       if (e.target && /input|select|textarea/i.test(e.target.tagName)) { return; }
       if (e.code === 'Space') { e.preventDefault(); App.playing ? stop() : play(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); stop(); next(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); stop(); prev(); }
       else if (e.key === 'r' || e.key === 'R') { stop(); reset(); }
+      else if (e.key === 'f' || e.key === 'F') { toggleFs(); }
     });
 
     window.addEventListener('hashchange', function () {
@@ -525,6 +610,7 @@
 
   /* ---------------- 启动 ---------------- */
   function boot() {
+    applyTheme(readTheme());
     bind();
     initSidebar();
     buildNav('');
